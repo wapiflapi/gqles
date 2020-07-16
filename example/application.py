@@ -1,45 +1,36 @@
 import threading
 
 from eventsourcing.application.sqlalchemy import SQLAlchemyApplication
-from sqlalchemy.orm import scoped_session
 
 import example.database
 
 
+class Application(SQLAlchemyApplication):
+    def __init__(self, **kwargs):
+        super().__init__(
+            session=example.database.ScopedSession,
+            **kwargs,
+        )
+
+
 _application = None
-lock = threading.Lock()
 
 
-def get_current_scope():
-    pass
-
-
-ScopedSession = scoped_session(
-    example.database.SessionLocal,
-    scopefunc=get_current_scope,
-)
-
-
-def construct_application(**kwargs):
-    return SQLAlchemyApplication(
-        session=ScopedSession,
-        **kwargs,
-    )
-
-
-def get_application():
+async def init_application(**kwargs):
     global _application
+    if _application is not None:
+        raise AssertionError("init_application() has already been called")
+    _application = Application(**kwargs)
+    return _application
+
+async def get_application():
     if _application is None:
-        lock.acquire()
-        try:
-            # Check again to avoid a TOCTOU bug.
-            if _application is None:
-                _application = construct_application()
-        finally:
-            lock.release()
+        raise AssertionError("init_application() must be called first")
+    return _application
 
-    yield _application
 
+async def close_application():
+    global _application
     if _application is not None:
         _application.close()
         _application = None

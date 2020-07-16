@@ -1,5 +1,7 @@
+import starlette_context
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 
 
 SQLALCHEMY_DATABASE_URL = 'sqlite:///:memory:'
@@ -12,6 +14,7 @@ engine = create_engine(
     ),
 )
 
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
@@ -19,9 +22,14 @@ SessionLocal = sessionmaker(
 )
 
 
-def get_db():
-    db = SessionLocal()
+def get_current_scope():
     try:
-        yield db
-    finally:
-        db.close()
+        return starlette_context.context["__scope_uuid"]
+    except RuntimeError:
+        return None
+
+
+ScopedSession = scoped_session(
+    SessionLocal,
+    scopefunc=get_current_scope,
+)

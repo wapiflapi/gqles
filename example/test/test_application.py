@@ -1,27 +1,40 @@
-import concurrent.futures
+import pytest
 
 import example.application
 
 
-def test_get_application():
+@pytest.mark.asyncio
+async def test_application_life_cycle():
 
-    def get_app():
-        return next(example.application.get_application())
+    # Closing should not fail if not existent.
+    await example.application.close_application()
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-    with concurrent.futures.ThreadPoolExecutor(
-            max_workers=5
-    ) as executor:
+    # Getting should fail if not existent.
+    with pytest.raises(AssertionError):
+        await example.application.get_application()
 
-        futures = [
-            executor.submit(get_app) for _ in range(10)
-        ]
+    # After init getting should work.
+    app = await example.application.init_application()
+    assert isinstance(app, example.application.Application)
 
-        results = [
-            future.result() for future
-            in concurrent.futures.as_completed(futures)
-        ]
+    # Now it should be possible to get it.
+    assert await example.application.get_application() is app
 
-        assert len(futures) == len(results) == 10
-        assert len(set(results)) == 1
-        assert results[0] is not None
+    # Init while existent should fail.
+    with pytest.raises(AssertionError):
+        await example.application.init_application()
+    # but getting should still work.
+    assert await example.application.get_application() is app
+
+    # Closing should make it not existent.
+    await example.application.close_application()
+    with pytest.raises(AssertionError):
+        await example.application.get_application()
+
+    # Make sure closing more than once is okay.
+    await example.application.close_application()
+
+    # Make sure we can init it again.
+    new = await example.application.init_application()
+    assert new is not app
+    assert isinstance(new, example.application.Application)

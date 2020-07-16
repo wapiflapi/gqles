@@ -1,0 +1,4 @@
+eventsourcing[sqlalchemy]
+fastapi[all]
+starlette-context
+pytest-asyncio

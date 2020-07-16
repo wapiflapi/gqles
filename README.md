@@ -50,10 +50,12 @@ This is code that is included which each module / service
   - [ ] Have domain entities be pydantic models
   - [ ] setting management with fastapi dependency and pydantic .env files
   - [ ] eventsourcing & alembic?
+  - [ ] scoped_session: What should the scope be when not in a request?
 
 ## TODO
   - [ ] https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/ asyn-exit-stack async-generator backports.
   - [ ] Use fastAPI sub applications to separate "modules", expect some boiler plate and having to figure out how to share dependencies.
+  - [ ] Add celery queue, and FastAPI background tasks, both with eventsourcing. scoped session.
 
 ## Problems with eventsourcing and fastaip
 
