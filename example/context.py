@@ -16,19 +16,3 @@ class RequestHashPlugin(PluginUUIDBase):
 
     async def enrich_response(self, response: Response) -> None:
         pass
-
-
-# Fix https://github.com/tomwojcik/starlette-context/issues/15
-
-__original_extract_value_from_header_by_key = (
-    PluginUUIDBase.extract_value_from_header_by_key)
-
-
-async def __patched_extract_value_from_header_by_key(self, request):
-    self.value = None
-    return await __original_extract_value_from_header_by_key(self, request)
-
-
-PluginUUIDBase.extract_value_from_header_by_key = (
-    __patched_extract_value_from_header_by_key
-)
