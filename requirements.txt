@@ -1,4 +1,6 @@
 eventsourcing[sqlalchemy]
-fastapi[all]
+fastapi
 starlette-context
 pytest-asyncio
+ariadne
+uvicorn

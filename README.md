@@ -51,14 +51,23 @@ This is code that is included which each module / service
   - [ ] setting management with fastapi dependency and pydantic .env files
   - [ ] eventsourcing & alembic?
   - [ ] scoped_session: What should the scope be when not in a request?
+  - [ ] useful for es ? https://github.com/django/asgiref#function-wrappers
+  - [ ] es: I don't like that changes are immediately published. It is not
+        explicit for the user when setting an attribute it affects stuff
+        in another request.
 
 ## TODO
   - [ ] https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/ asyn-exit-stack async-generator backports.
   - [ ] Use fastAPI sub applications to separate "modules", expect some boiler plate and having to figure out how to share dependencies.
   - [ ] Add celery queue, and FastAPI background tasks, both with eventsourcing. scoped session.
+  - [ ] https://docs.authlib.org/en/latest/client/fastapi.html
 
-## Problems with eventsourcing and fastaip
+## Problems with eventsourcing and fastapi
 
 > In general you want one, and only one, instance of your application class in each process.
 
 - Wasn't super clear if application was threadsafe
+
+- Not clear how updating the domain models ends up storing events in the application's event store.
+  turns out: the application has a persistence policy that subscribes to domain events. (using subscribe, which is the interface)
+- encryption is done after compression, that's not recommended!

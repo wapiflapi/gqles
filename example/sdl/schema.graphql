@@ -1,0 +1,78 @@
+type Query {
+  db: [DBTable!]
+  processApplications: [ProcessApplication!]
+}
+
+type ProcessApplication {
+  name: String!
+  events(
+    originatorId: String!,
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+  ): AggregateRootEventConnection!
+  notifications(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+  ): NotificationConnection!
+}
+
+type AggregateRootEventConnection {
+  pageInfo: PageInfo!
+  edges: [AggregateRootEventEdge!]!
+}
+
+type AggregateRootEventEdge {
+  cursor: String!
+  node: AggregateRootEvent!
+}
+
+type AggregateRootEvent {
+  topic: String
+  originatorId: String
+  originatorVersion: Int
+  timestamp: Datetime
+}
+
+type NotificationConnection {
+  pageInfo: PageInfo!
+  edges: [NotificationEdge!]!
+}
+
+type NotificationEdge {
+  cursor: String!
+  node: Notification!
+}
+
+type Notification {
+  applicationName: String
+  notificationId: Int
+  originatorId: String
+  originatorVersion: Int
+  topic: String
+  state: String
+  causalDependencies: String
+  event: AggregateRootEvent
+}
+
+type DBTable {
+  name: String!
+  columns: [DBColumn!]
+}
+
+type DBColumn {
+  name: String!
+  type: String!
+}
+
+type PageInfo {
+  hasPreviousPage: Boolean!
+  hasNextPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+scalar Datetime

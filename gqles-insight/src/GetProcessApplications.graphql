@@ -1,0 +1,15 @@
+query GetProcessApplications {
+  processApplications {
+    name
+    notifications {
+      edges {
+        node {
+          applicationName
+          originatorId
+          originatorVersion
+          topic
+        }
+      }
+    }
+  }
+}
