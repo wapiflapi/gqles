@@ -1,0 +1,29 @@
+query GetProcessApplicationNotifications {
+  processApplications {
+    name
+  }
+  notifications {
+    pageInfo {
+      endCursor
+      startCursor
+      hasNextPage
+      hasPreviousPage
+    }
+    edges {
+      cursor
+      processApplication {
+        name
+      }
+      node {
+        notificationId
+        event {
+          timestamp
+          originatorId
+          originatorVersion
+          topic
+          state
+        }
+      }
+    }
+  }
+}

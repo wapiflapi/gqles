@@ -67,7 +67,7 @@ This is code that is included which each module / service
 > In general you want one, and only one, instance of your application class in each process.
 
 - Wasn't super clear if application was threadsafe
-
 - Not clear how updating the domain models ends up storing events in the application's event store.
   turns out: the application has a persistence policy that subscribes to domain events. (using subscribe, which is the interface)
 - encryption is done after compression, that's not recommended!
+- eventsourcing.utils.times.datetime_from_timestamp is naive. WTF.

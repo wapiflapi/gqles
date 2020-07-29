@@ -60,6 +60,7 @@ async def root():
     aggregate = example.domain.CreateOrder.create()
     aggregate.__save__()
 
+    print(aggregate.__dict__)
     return aggregate
 
     return dict(

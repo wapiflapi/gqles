@@ -1,9 +1,19 @@
 type Query {
   db: [DBTable!]
   processApplications: [ProcessApplication!]
+
+  # We need a way to get a processApplication or (ideally) an aggregateroot
+  notifications(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+    processApplications: [String!],
+  ): NotificationConnection!
 }
 
 type ProcessApplication {
+  id: ID!
   name: String!
   events(
     originatorId: String!,
@@ -31,10 +41,59 @@ type AggregateRootEventEdge {
 }
 
 type AggregateRootEvent {
+
+  id: ID!
+
   topic: String
   originatorId: String
   originatorVersion: Int
   timestamp: Datetime
+  state: String
+  # Something else we need is insight into the state:
+  stateInsight: [StateInsightItem]
+
+  originatorState: String
+  # Something else we need is insight into the state:
+  originatorStateInsight: [StateInsightItem]
+
+  previousEvents(
+    last: Int = 20,
+    before: String,
+  ): AggregateRootEventConnection
+
+  nextEvents(
+    first: Int = 20,
+    after: String,
+  ): AggregateRootEventConnection
+
+}
+
+type StateInsightItem {
+  key: String!
+  # value: Union # of Datetime, AggregateRoot
+
+}
+
+type AggregateRoot {
+  id: String
+
+  # TODO: We probably want the cursors to be public?
+  # I don't know. maybe.
+  # WE NEED to be able to start paginating an aggregate from an event
+  # we got from some where unrelated.
+  # We could just have previousEventsFromAggregate and
+  # nextEventsFromAggregate on the event type.  and paginate both of
+  # those. would be cool.
+  # TODO: we need to add stuff to query anyway, we don't want the whole
+  # recursive big query every time.
+  # - query.aggregate(oId) and - query.event(oId, oVersion) are things we need.
+
+  events(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+  ): AggregateRootEventConnection!
 }
 
 type NotificationConnection {
@@ -43,12 +102,12 @@ type NotificationConnection {
 }
 
 type NotificationEdge {
+  processApplication: ProcessApplication!
   cursor: String!
   node: Notification!
 }
 
 type Notification {
-  applicationName: String
   notificationId: Int
   originatorId: String
   originatorVersion: Int

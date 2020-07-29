@@ -1,13 +1,12 @@
 import base64
+import datetime
+import functools
 import json
 
 import ariadne
 
 import eventsourcing.utils.topic
-import eventsourcing.utils.times
 import eventsourcing.application.notificationlog
-
-import starlette_context
 
 import sqlalchemy
 
@@ -19,8 +18,31 @@ type_defs = ariadne.load_schema_from_path("example/sdl/")
 datetime_scalar = ariadne.ScalarType("Datetime")
 
 query = ariadne.ObjectType("Query")
-
 process_application = ariadne.ObjectType("ProcessApplication")
+aggregate_root_event = ariadne.ObjectType("AggregateRootEvent")
+
+
+BASE64_CURSORS = True
+
+
+def to_base64(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        result = f(*args, **kwargs)
+        if result is not None:
+            result = base64.b64encode(result.encode("utf8")).decode("utf8")
+        return result
+    return wrapper if BASE64_CURSORS else f
+
+
+def from_base64(f):
+    @functools.wraps(f)
+    def wrapper(data, *args, **kwargs):
+        if data is not None:
+            data = base64.b64decode(data.encode("utf8")).decode("utf8")
+        return f(data, *args, **kwargs,)
+    return wrapper if BASE64_CURSORS else f
+
 
 @datetime_scalar.serializer
 def serialize_datetime(value):
@@ -33,29 +55,28 @@ async def resolve_process_applications(obj, info):
     return system_runner.processes.values()
 
 
-@process_application.field("notifications")
-async def resolve_process_applications_notifications(
-        obj, info, last, first=None, before=None, after=None,
+def paginate_notifications(
+        notificationlog, last, first=None, before=None, after=None,
 ):
+    """
+    Paginate through a notification log.
 
-    def from_cursor(cursor):
-        return int(cursor)
-
-    def to_cursor(position):
-        return str(position)
+    Return:
+        ([[position, notification], ...], has_prev, has_next)
+    """
 
     reader = eventsourcing.application.notificationlog.NotificationLogReader(
-        obj.notification_log,
+        notificationlog,
         use_direct_query_if_available=True,
     )
 
-    next_position = obj.notification_log.get_next_position()
+    next_position = notificationlog.get_next_position()
 
     if before is not None:
-        position = max(0, from_cursor(before) - last)
-        advance_by = min(last, from_cursor(before))
+        position = max(0, before - last)
+        advance_by = min(last, before)
     elif after is not None:
-        position = from_cursor(after) + 1
+        position = after + 1
         advance_by = first if first is not None else last
     elif first is not None:
         position = 0
@@ -67,56 +88,194 @@ async def resolve_process_applications_notifications(
     reader.seek(position)
     notifications = reader.list_notifications(advance_by=advance_by)
 
-    def foobar(x):
-        print("Resolving using %s" % (x,))
+    has_prev = position > 0
+    has_next = position + advance_by < next_position
 
-    return dict(
-        pageInfo=dict(
-            hasPreviousPage=position > 0,
-            hasNextPage=position + advance_by < next_position,
-            startCursor=to_cursor(position),
-            endCursor=to_cursor(position + len(notifications) - 1),
-        ),
-        edges=[dict(
-            cursor=to_cursor(position + offset),
+    return [(
+        position + offset, notification
+    ) for offset, notification in enumerate(notifications)], has_prev, has_next
+
+
+@query.field("notifications")
+async def resolve_notifications(
+        obj, info,
+        last, first=None, before=None, after=None,
+        processApplications=None,
+):
+
+    @from_base64
+    def from_cursor(cursor):
+        return json.loads(cursor) if cursor is not None else None
+
+    @to_base64
+    def to_cursor(data):
+        return json.dumps(data) if data is not None else None
+
+    before_data = from_cursor(before) or {}
+    after_data = from_cursor(after) or {}
+
+    has_previous_page = False
+    has_next_page = False
+
+    streams = []
+
+    cursor_data = {}
+
+    system_runner = await example.application.get_system_runner()
+    for process in system_runner.processes.values():
+        name = process.name
+        if processApplications is not None and name not in processApplications:
+            continue
+
+        cursor_data[name] = after_data.get(name, before_data.get(name))
+
+        items, hasprev, hasnext = paginate_notifications(
+            process.notification_log,
+            last=last, first=first,
+            before=before_data.get(name), after=after_data.get(name),
+        )
+
+        has_previous_page = has_previous_page or hasprev
+        has_next_page = has_next_page or hasnext
+
+        streams.append([(
+            process,
+            position,
+            notification,
+            process.event_store.event_mapper.event_from_topic_and_state(
+                notification["topic"], notification["state"],
+            ),
+        ) for position, notification in items])
+
+    edges = []
+    function, idx, limit = (
+        (max, -1, last) if first is None else
+        (min, 0, first)
+    )
+
+    while any(streams) and len(edges) < limit:
+
+        process, position, notification, event = function(
+            filter(None, streams),
+            key=lambda s: s[idx][3].timestamp,
+        ).pop(idx)
+
+        cursor_data[process.name] = position
+
+        edges.append(dict(
+            cursor=to_cursor(cursor_data),
+            processApplication=process,
             node=dict(
-                applicationName=obj.name,
                 notificationId=notification["id"],
                 originatorId=notification["originator_id"],
                 originatorVersion=notification["originator_version"],
                 topic=notification["topic"],
-                state=base64.b64encode(notification["state"]).decode("utf8"),
                 causalDependencies=notification["causal_dependencies"],
                 # Careful with the lambda scoping! We need to make a copy
                 # of the current notification in the lambda's scope.
-                event=lambda _, n=notification: event_data_from_event(
-                    obj.event_store.event_mapper.event_from_topic_and_state(
-                        n["topic"], n["state"],
-                    ),
+                state=lambda _, n=notification: base64.b64encode(
+                    n["state"]).decode("utf8"),
+                event=get_event_data(
+                    process, event, notification["topic"], notification["state"]
                 ),
             ),
-        ) for offset, notification in enumerate(notifications)],
+        ))
+
+    if idx == -1:
+        edges = edges[::-1]
+        has_previous_page = has_previous_page or any(streams)
+    else:
+        has_next_page = has_next_page or any(streams)
+
+    return dict(
+        pageInfo=dict(
+            hasPreviousPage=has_previous_page,
+            hasNextPage=has_next_page,
+            startCursor=edges[0]["cursor"] if edges else None,
+            endCursor=edges[-1]["cursor"] if edges else None,
+        ),
+        edges=edges,
     )
 
 
-@process_application.field("events")
-async def resolve_process_applications_events(
-        obj, info, originatorId, last, first=None, before=None, after=None,
+@process_application.field("id")
+async def resolve_process_applications_id(obj, info):
+    return obj.name
+
+
+@process_application.field("notifications")
+async def resolve_process_applications_notifications(
+        obj, info, last, first=None, before=None, after=None,
 ):
 
+    @from_base64
     def from_cursor(cursor):
-        return int(cursor)
+        return int(cursor) if cursor is not None else None
 
+    @to_base64
     def to_cursor(position):
-        return str(position)
+        return str(position) if position is not None else None
+
+    items, has_prev, has_next = paginate_notifications(
+        obj.notification_log,
+        last=last, first=first,
+        before=from_cursor(before), after=from_cursor(after)
+    )
+
+    edges = [dict(
+        cursor=to_cursor(position),
+        processApplication=obj,
+        node=dict(
+            notificationId=notification["id"],
+            originatorId=notification["originator_id"],
+            originatorVersion=notification["originator_version"],
+            topic=notification["topic"],
+            # Careful with the lambda scoping! We need to make a copy
+            # of the current notification in the lambda's scope.
+                state=lambda _, n=notification: base64.b64encode(
+                    n["state"]).decode("utf8"),
+            causalDependencies=notification["causal_dependencies"],
+            # Careful with the lambda scoping! We need to make a copy
+            # of the current notification in the lambda's scope.
+                event=lambda _, n=notification: get_event_data(
+                    obj,
+                    obj.event_store.event_mapper.event_from_topic_and_state(
+                        n["topic"], n["state"],
+                    ),
+                    n["topic"],
+                    n["state"]
+                ),
+        ),
+    ) for position, notification in items]
+
+    return dict(
+        pageInfo=dict(
+            hasPreviousPage=has_prev,
+            hasNextPage=has_next,
+            startCursor=edges[0]["cursor"] if edges else None,
+            endCursor=edges[-1]["cursor"] if edges else None,
+        ),
+        edges=edges,
+    )
+
+
+def paginate_events(
+        eventstore, originatorId, last, first=None, before=None, after=None,
+):
+    """
+    Paginate through an event store.
+
+    Return:
+        ([[position, notification], ...], has_prev, has_next)
+    """
 
     is_ascending = after is not None
     limit = first if first is not None else last
 
-    events = list(obj.event_store.iter_events(
+    events = list(eventstore.iter_events(
         originator_id=originatorId,
-        gt=from_cursor(after) if after else None,
-        lt=from_cursor(before) if before else None,
+        gt=after,
+        lt=before,
         limit=limit+1,
         is_ascending=is_ascending,
     ))
@@ -126,28 +285,163 @@ async def resolve_process_applications_events(
     if not is_ascending:
         events = list(reversed(events))
 
-    return dict(
-        pageInfo=dict(
-            hasPreviousPage=False if is_ascending else has_more,
-            hasNextPage=has_more if is_ascending else False,
-            startCursor=events and events[0].originator_version,
-            endCursor=events and events[-1].originator_version,
-        ),
-        edges=[dict(
-            cursor=to_cursor(event.originator_version),
-            node=event_data_from_event(event),
-        ) for event in events],
+    return (
+        [(event.originator_version, event) for event in events],
+        (after is not None) or (events and events[0].originator_version > 0),
+        (before is not None) or has_more,
     )
 
 
-def event_data_from_event(event):
+@process_application.field("events")
+async def resolve_process_applications_events(
+        obj, info, originatorId, last, first=None, before=None, after=None,
+):
+
+    @from_base64
+    def from_cursor(cursor):
+        return int(cursor) if cursor is not None else None
+
+    @to_base64
+    def to_cursor(position):
+        return str(position) if position is not None else None
+
+    events, has_prev, has_next = paginate_events(
+        obj.event_store, originatorId,
+        last=last, first=first,
+        before=from_cursor(before),
+        after=from_cursor(after),
+    )
+
+    edges = [dict(
+        cursor=to_cursor(event.originator_version),
+        # Careful with the lambda scoping! We need to make a copy
+        # of the current notification in the lambda's scope.
+        node=lambda _, e=event: get_event_data(
+            obj,
+            e,
+            *obj.event_store.event_mapper.get_item_topic_and_state(
+                e.__class__, e.__dict__,
+            ),
+        ),
+    ) for event in events]
+
     return dict(
-        topic=eventsourcing.utils.topic.get_topic(type(event)),
+        edges=edges,
+        pageInfo=dict(
+            hasPreviousPage=has_prev,
+            hasNextPage=has_next,
+            startCursor=edges[0]["cursor"] if edges else None,
+            endCursor=edges[-1]["cursor"] if edges else None,
+        ),
+    )
+
+
+def get_event_data(application, event, topic, state):
+
+    return dict(
+        application=application,
+        topic=topic,
+        # Careful with the lambda scoping! We need to make a copy
+        # of the current notification in the lambda's scope.
+        # In this case it's not needed, but keep it in case this
+        # gets copy/pasted somewhere else.
+        state=lambda _, s=state: base64.b64encode(s).decode("utf8"),
         originatorId=event.originator_id,
         originatorVersion=event.originator_version,
-        timestamp=eventsourcing.utils.times.datetime_from_timestamp(
-            event.timestamp,
+        timestamp=datetime.datetime.fromtimestamp(
+            event.timestamp, datetime.timezone.utc,
         ),
+    )
+
+
+async def _resolve_aggregate_root_event_events(
+        obj, info, first=None, last=None, before=None, after=None
+):
+
+    try:
+        application = obj["application"]
+        originatorId = obj["originatorId"]
+    except KeyError:
+        return None
+
+    @from_base64
+    def from_cursor(cursor):
+        return int(cursor) if cursor is not None else None
+
+    @to_base64
+    def to_cursor(position):
+        return str(position) if position is not None else None
+
+    events, has_prev, has_next = paginate_events(
+        application.event_store,
+        originatorId,
+        first=first,
+        last=last,
+        before=before,
+        after=after,
+    )
+
+    edges = [dict(
+        cursor=to_cursor(originator_version),
+        # Careful with the lambda scoping! We need to make a copy
+        # of the current notification in the lambda's scope.
+        node=lambda _, e=event: get_event_data(
+            application, e,
+            *application.event_store.event_mapper.get_item_topic_and_state(
+                e.__class__, e.__dict__,
+            ),
+        ),
+    ) for (originator_version, event) in events]
+
+    return dict(
+        edges=edges,
+        pageInfo=dict(
+            hasPreviousPage=has_prev,
+            hasNextPage=has_next,
+            startCursor=edges[0]["cursor"] if edges else None,
+            endCursor=edges[-1]["cursor"] if edges else None,
+        ),
+    )
+
+
+@aggregate_root_event.field("previousEvents")
+async def resolve_aggregate_root_event_previous_events(
+        obj, info, last, before=None,
+):
+
+    try:
+        originatorVersion = obj["originatorVersion"]
+    except KeyError:
+        return None
+
+    return await _resolve_aggregate_root_event_events(
+        obj, info, first=None, last=last, after=None,
+        before=originatorVersion if before is None else before,
+    )
+
+
+@aggregate_root_event.field("nextEvents")
+async def resolve_aggregate_root_event_next_events(
+        obj, info, first, after=None,
+):
+
+    try:
+        originatorVersion = obj["originatorVersion"]
+    except KeyError:
+        return None
+
+    return await _resolve_aggregate_root_event_events(
+        obj, info, first=first, last=None, before=None,
+        after=originatorVersion if after is None else after,
+    )
+
+
+@aggregate_root_event.field("id")
+async def resolve_aggregate_root_event_id(obj, info):
+    return "%s/%s/%d" % (
+        obj["application"].name,
+        obj["originatorId"],
+        obj["originatorVersion"],
     )
 
 
@@ -165,11 +459,13 @@ async def resolve_db(obj, info):
     ) for table in insp.get_table_names()]
 
 
-# TODO: gqles should at least give a warning if not everything is passed on here
-# I've had problems multiple times forgetting to add something.
+# TODO: gqles should at least give a warning if not everything is
+# passed on here I've had problems multiple times forgetting to add
+# something.
 schema = ariadne.make_executable_schema(
     type_defs,
     datetime_scalar,
     query,
     process_application,
+    aggregate_root_event,
 )
