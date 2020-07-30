@@ -1,0 +1,26 @@
+#import "EventPreview.graphql"
+
+
+fragment EventPage on EventConnection {
+  pageInfo {
+    endCursor
+    hasNextPage
+  }
+  edges {
+    cursor
+    node {
+      ...EventPreview
+    }
+  }
+}
+
+
+fragment EventLog on Event {
+  ...EventPreview
+  previousEvents {
+    ...EventPage
+  }
+  nextEvents {
+    ...EventPage
+  }
+}

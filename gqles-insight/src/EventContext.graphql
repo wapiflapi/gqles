@@ -1,0 +1,18 @@
+#import "EventPreview.graphql"
+
+
+fragment EventContext on Event {
+  ...EventPreview
+  stateInsight {
+    key
+    text
+    ...on StateInsightUUID {
+      uuid
+    }
+    ...on StateInsightDatetime {
+      datetime
+    }
+    ...on StateInsightJSON {
+      json
+    }
+  }}

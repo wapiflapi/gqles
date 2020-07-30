@@ -1,27 +1,33 @@
 type Query {
   db: [DBTable!]
-  processApplications: [ProcessApplication!]
+  applications: [Application!]
 
-  # We need a way to get a processApplication or (ideally) an aggregateroot
   notifications(
     last: Int = 20,
     before: String,
     first: Int,
     after: String,
-    processApplications: [String!],
+    applicationNames: [String!],
   ): NotificationConnection!
+
+  event(
+    applicationName: String!,
+    originatorId: UUID!,
+    originatorVersion: Int!,
+  ): Event,
+
 }
 
-type ProcessApplication {
+type Application {
   id: ID!
   name: String!
   events(
-    originatorId: String!,
+    originatorId: UUID!,
     last: Int = 20,
     before: String,
     first: Int,
     after: String,
-  ): AggregateRootEventConnection!
+  ): EventConnection!
   notifications(
     last: Int = 20,
     before: String,
@@ -30,71 +36,63 @@ type ProcessApplication {
   ): NotificationConnection!
 }
 
-type AggregateRootEventConnection {
+type EventConnection {
   pageInfo: PageInfo!
-  edges: [AggregateRootEventEdge!]!
+  edges: [EventEdge!]!
 }
 
-type AggregateRootEventEdge {
+type EventEdge {
   cursor: String!
-  node: AggregateRootEvent!
+  node: Event!
 }
 
-type AggregateRootEvent {
+type Event {
 
   id: ID!
 
   topic: String
-  originatorId: String
-  originatorVersion: Int
+  originatorId: UUID!
+  originatorVersion: Int!
   timestamp: Datetime
   state: String
   # Something else we need is insight into the state:
-  stateInsight: [StateInsightItem]
-
-  originatorState: String
-  # Something else we need is insight into the state:
-  originatorStateInsight: [StateInsightItem]
+  stateInsight: [StateInsight!]
 
   previousEvents(
     last: Int = 20,
     before: String,
-  ): AggregateRootEventConnection
+  ): EventConnection!
 
   nextEvents(
     first: Int = 20,
     after: String,
-  ): AggregateRootEventConnection
+  ): EventConnection!
 
 }
 
-type StateInsightItem {
+interface StateInsight {
   key: String!
-  # value: Union # of Datetime, AggregateRoot
-
+  text: String
 }
 
-type AggregateRoot {
-  id: String
-
-  # TODO: We probably want the cursors to be public?
-  # I don't know. maybe.
-  # WE NEED to be able to start paginating an aggregate from an event
-  # we got from some where unrelated.
-  # We could just have previousEventsFromAggregate and
-  # nextEventsFromAggregate on the event type.  and paginate both of
-  # those. would be cool.
-  # TODO: we need to add stuff to query anyway, we don't want the whole
-  # recursive big query every time.
-  # - query.aggregate(oId) and - query.event(oId, oVersion) are things we need.
-
-  events(
-    last: Int = 20,
-    before: String,
-    first: Int,
-    after: String,
-  ): AggregateRootEventConnection!
+type StateInsightDatetime implements StateInsight {
+  key: String!
+  text: String
+  datetime: Datetime!
 }
+
+type StateInsightUUID implements StateInsight {
+  key: String!
+  text: String
+  uuid: UUID!
+}
+
+type StateInsightJSON implements StateInsight {
+  key: String!
+  text: String
+  json: String!
+}
+
 
 type NotificationConnection {
   pageInfo: PageInfo!
@@ -102,19 +100,19 @@ type NotificationConnection {
 }
 
 type NotificationEdge {
-  processApplication: ProcessApplication!
+  application: Application!
   cursor: String!
   node: Notification!
 }
 
 type Notification {
-  notificationId: Int
-  originatorId: String
-  originatorVersion: Int
+  notificationId: Int!
+  originatorId: UUID!
+  originatorVersion: Int!
   topic: String
   state: String
   causalDependencies: String
-  event: AggregateRootEvent
+  event: Event
 }
 
 type DBTable {
@@ -135,3 +133,4 @@ type PageInfo {
 }
 
 scalar Datetime
+scalar UUID

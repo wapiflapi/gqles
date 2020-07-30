@@ -1,7 +1,9 @@
 import base64
 import datetime
+import decimal
 import functools
 import json
+import uuid
 
 import ariadne
 
@@ -11,15 +13,16 @@ import eventsourcing.application.notificationlog
 import sqlalchemy
 
 import example.application
+import example.scalars
 
 
 type_defs = ariadne.load_schema_from_path("example/sdl/")
 
-datetime_scalar = ariadne.ScalarType("Datetime")
+state_insight = ariadne.InterfaceType("StateInsight")
 
 query = ariadne.ObjectType("Query")
-process_application = ariadne.ObjectType("ProcessApplication")
-aggregate_root_event = ariadne.ObjectType("AggregateRootEvent")
+application = ariadne.ObjectType("Application")
+event = ariadne.ObjectType("Event")
 
 
 BASE64_CURSORS = True
@@ -44,13 +47,9 @@ def from_base64(f):
     return wrapper if BASE64_CURSORS else f
 
 
-@datetime_scalar.serializer
-def serialize_datetime(value):
-    return value.isoformat()
 
-
-@query.field("processApplications")
-async def resolve_process_applications(obj, info):
+@query.field("applications")
+async def resolve_applications(obj, info):
     system_runner = await example.application.get_system_runner()
     return system_runner.processes.values()
 
@@ -100,7 +99,7 @@ def paginate_notifications(
 async def resolve_notifications(
         obj, info,
         last, first=None, before=None, after=None,
-        processApplications=None,
+        applicationNames=None,
 ):
 
     @from_base64
@@ -122,15 +121,15 @@ async def resolve_notifications(
     cursor_data = {}
 
     system_runner = await example.application.get_system_runner()
-    for process in system_runner.processes.values():
-        name = process.name
-        if processApplications is not None and name not in processApplications:
+    for application in system_runner.processes.values():
+        name = application.name
+        if applicationNames is not None and name not in applicationNames:
             continue
 
         cursor_data[name] = after_data.get(name, before_data.get(name))
 
         items, hasprev, hasnext = paginate_notifications(
-            process.notification_log,
+            application.notification_log,
             last=last, first=first,
             before=before_data.get(name), after=after_data.get(name),
         )
@@ -139,10 +138,10 @@ async def resolve_notifications(
         has_next_page = has_next_page or hasnext
 
         streams.append([(
-            process,
+            application,
             position,
             notification,
-            process.event_store.event_mapper.event_from_topic_and_state(
+            application.event_store.event_mapper.event_from_topic_and_state(
                 notification["topic"], notification["state"],
             ),
         ) for position, notification in items])
@@ -155,16 +154,16 @@ async def resolve_notifications(
 
     while any(streams) and len(edges) < limit:
 
-        process, position, notification, event = function(
+        application, position, notification, event = function(
             filter(None, streams),
             key=lambda s: s[idx][3].timestamp,
         ).pop(idx)
 
-        cursor_data[process.name] = position
+        cursor_data[application.name] = position
 
         edges.append(dict(
             cursor=to_cursor(cursor_data),
-            processApplication=process,
+            application=application,
             node=dict(
                 notificationId=notification["id"],
                 originatorId=notification["originator_id"],
@@ -176,7 +175,10 @@ async def resolve_notifications(
                 state=lambda _, n=notification: base64.b64encode(
                     n["state"]).decode("utf8"),
                 event=get_event_data(
-                    process, event, notification["topic"], notification["state"]
+                    application,
+                    event,
+                    notification["topic"],
+                    notification["state"]
                 ),
             ),
         ))
@@ -198,13 +200,35 @@ async def resolve_notifications(
     )
 
 
-@process_application.field("id")
-async def resolve_process_applications_id(obj, info):
+@query.field("event")
+async def resolve_query_event(
+        obj, info, applicationName, originatorId, originatorVersion,
+):
+    system_runner = await example.application.get_system_runner()
+    try:
+        application = system_runner.processes[applicationName]
+    except KeyError:
+        return None
+
+    print((originatorId, type(originatorId)))
+    event = application.event_store.get_event(originatorId, originatorVersion)
+
+    return get_event_data(
+        application,
+        event,
+        *application.event_store.event_mapper.get_item_topic_and_state(
+            event.__class__, event.__dict__,
+        ),
+    )
+
+
+@application.field("id")
+async def resolve_applications_id(obj, info):
     return obj.name
 
 
-@process_application.field("notifications")
-async def resolve_process_applications_notifications(
+@application.field("notifications")
+async def resolve_applications_notifications(
         obj, info, last, first=None, before=None, after=None,
 ):
 
@@ -224,7 +248,7 @@ async def resolve_process_applications_notifications(
 
     edges = [dict(
         cursor=to_cursor(position),
-        processApplication=obj,
+        application=obj,
         node=dict(
             notificationId=notification["id"],
             originatorId=notification["originator_id"],
@@ -292,8 +316,8 @@ def paginate_events(
     )
 
 
-@process_application.field("events")
-async def resolve_process_applications_events(
+@application.field("events")
+async def resolve_applications_events(
         obj, info, originatorId, last, first=None, before=None, after=None,
 ):
 
@@ -340,6 +364,7 @@ def get_event_data(application, event, topic, state):
 
     return dict(
         application=application,
+        event=event,
         topic=topic,
         # Careful with the lambda scoping! We need to make a copy
         # of the current notification in the lambda's scope.
@@ -354,7 +379,7 @@ def get_event_data(application, event, topic, state):
     )
 
 
-async def _resolve_aggregate_root_event_events(
+async def _resolve_event_events(
         obj, info, first=None, last=None, before=None, after=None
 ):
 
@@ -404,8 +429,8 @@ async def _resolve_aggregate_root_event_events(
     )
 
 
-@aggregate_root_event.field("previousEvents")
-async def resolve_aggregate_root_event_previous_events(
+@event.field("previousEvents")
+async def resolve_event_previous_events(
         obj, info, last, before=None,
 ):
 
@@ -414,14 +439,14 @@ async def resolve_aggregate_root_event_previous_events(
     except KeyError:
         return None
 
-    return await _resolve_aggregate_root_event_events(
+    return await _resolve_event_events(
         obj, info, first=None, last=last, after=None,
         before=originatorVersion if before is None else before,
     )
 
 
-@aggregate_root_event.field("nextEvents")
-async def resolve_aggregate_root_event_next_events(
+@event.field("nextEvents")
+async def resolve_event_next_events(
         obj, info, first, after=None,
 ):
 
@@ -430,19 +455,59 @@ async def resolve_aggregate_root_event_next_events(
     except KeyError:
         return None
 
-    return await _resolve_aggregate_root_event_events(
+    return await _resolve_event_events(
         obj, info, first=first, last=None, before=None,
         after=originatorVersion if after is None else after,
     )
 
 
-@aggregate_root_event.field("id")
-async def resolve_aggregate_root_event_id(obj, info):
+@event.field("id")
+async def resolve_event_id(obj, info):
     return "%s/%s/%d" % (
         obj["application"].name,
         obj["originatorId"],
         obj["originatorVersion"],
     )
+
+
+@state_insight.type_resolver
+def resolve_state_insight_type(obj, *_):
+    if isinstance(obj.get("uuid"), uuid.UUID):
+        return "StateInsightUUID"
+    if isinstance(obj.get("datetime"), datetime.datetime):
+        return "StateInsightDatetime"
+    if isinstance(obj.get("json"), str):
+        return "StateInsightJSON"
+    return None
+
+
+@event.field("stateInsight")
+async def resolve_event_id(obj, info):
+
+    def decode(key, value):
+
+        if isinstance(value, uuid.UUID):
+            return dict(key=key, text=str(value), uuid=value)
+        if isinstance(value, datetime.datetime):
+            return dict(key=key, text=str(value), datetime=value)
+        if key == "timestamp" and isinstance(value, decimal.Decimal):
+            dt = datetime.datetime.fromtimestamp(
+                value, datetime.timezone.utc,
+            )
+            return dict(key=key, text=str(dt), datetime=dt)
+
+        try:
+            return dict(key=key, text=str(value), json=json.dumps(value))
+        except TypeError:
+            pass
+
+        return dict(key=key, text=str(value))
+
+
+    return [
+        decode(key, value)
+        for key, value in obj["event"].__dict__.items()
+    ]
 
 
 @query.field("db")
@@ -464,8 +529,9 @@ async def resolve_db(obj, info):
 # something.
 schema = ariadne.make_executable_schema(
     type_defs,
-    datetime_scalar,
+    *example.scalars.types,
     query,
-    process_application,
-    aggregate_root_event,
+    application,
+    event,
+    state_insight,
 )

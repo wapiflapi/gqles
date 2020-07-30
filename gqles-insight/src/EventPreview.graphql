@@ -1,0 +1,7 @@
+fragment EventPreview on Event {
+  id
+  timestamp
+  originatorId
+  originatorVersion
+  topic
+}

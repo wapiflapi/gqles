@@ -1,0 +1,24 @@
+#import "EventPreview.graphql"
+
+query GetNotifications {
+  applications {
+    name
+  }
+  notifications {
+    pageInfo {
+      endCursor
+      hasNextPage
+    }
+    edges {
+      cursor
+      application {
+        name
+      }
+      node {
+        event {
+          ...EventPreview
+        }
+      }
+    }
+  }
+}
