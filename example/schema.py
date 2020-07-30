@@ -522,6 +522,9 @@ async def resolve_event_id(obj, info):
         obj["originatorVersion"],
     )
 
+@event.field("applicationName")
+async def resolve_event_id(obj, info):
+    return obj["application"].name
 
 @state_insight.type_resolver
 def resolve_state_insight_type(obj, *_):

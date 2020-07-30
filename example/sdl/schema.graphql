@@ -66,6 +66,7 @@ type Event {
   id: ID!
 
   topic: String
+  applicationName: String!
   originatorId: UUID!
   originatorVersion: Int!
   timestamp: Datetime

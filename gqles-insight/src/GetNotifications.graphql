@@ -1,9 +1,6 @@
 #import "EventPreview.graphql"
 
 query GetNotifications {
-  applications {
-    name
-  }
   notifications {
     pageInfo {
       endCursor
@@ -11,9 +8,6 @@ query GetNotifications {
     }
     edges {
       cursor
-      application {
-        name
-      }
       node {
         event {
           ...EventPreview

@@ -8,18 +8,25 @@ import { HttpLink } from 'apollo-link-http';
 import { loader } from 'graphql.macro';
 
 import { withStyles } from '@material-ui/core/styles';
+import { green, pink } from '@material-ui/core/colors';
 
 import Accordion from '@material-ui/core/Accordion';
 import AccordionDetails from '@material-ui/core/AccordionDetails';
 import AccordionSummary from '@material-ui/core/AccordionSummary';
 import AccordionActions from '@material-ui/core/AccordionActions';
+import ArrowDownwardIcon from '@material-ui/icons/ArrowDownward';
+import ArrowForwardIcon from '@material-ui/icons/ArrowForward';
+import ArrowUpwardIcon from '@material-ui/icons/ArrowUpward';
 import Avatar from '@material-ui/core/Avatar';
 import Button from '@material-ui/core/Button';
 import Box from '@material-ui/core/Box';
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft';
 import ClickAwayListener from '@material-ui/core/ClickAwayListener';
+import Container from '@material-ui/core/Container';
+import Divider from '@material-ui/core/Divider';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import Grid from '@material-ui/core/Grid';
+import HourglassEmptyIcon from '@material-ui/icons/HourglassEmpty';
 import IconButton from '@material-ui/core/IconButton';
 import Link from '@material-ui/core/Link';
 import List from '@material-ui/core/List';
@@ -27,13 +34,16 @@ import ListItem from '@material-ui/core/ListItem';
 import ListItemAvatar from '@material-ui/core/ListItemAvatar';
 import ListItemSecondaryAction from '@material-ui/core/ListItemSecondaryAction';
 import ListItemText from '@material-ui/core/ListItemText';
+import ListSubheader from '@material-ui/core/ListSubheader';
 import NavigateNextIcon from '@material-ui/icons/NavigateNext';
+import Paper from '@material-ui/core/Paper';
 import SearchIcon from '@material-ui/icons/Search';
 import Skeleton from '@material-ui/lab/Skeleton';
 import SvgIcon from '@material-ui/core/SvgIcon';
 import Typography from '@material-ui/core/Typography';
+import UnfoldMoreIcon from '@material-ui/icons/UnfoldMore';
 
-import { Router, Link as RouterLink, useMatch } from "@reach/router";
+import { Router, Link as RouterLink, useMatch, Redirect } from "@reach/router";
 
 import copy from 'clipboard-copy';
 import TimeAgo from 'react-timeago';
@@ -121,18 +131,13 @@ function EventTopic({ event }) {
     ));
 }
 
-function EventLink({ applicationName, event }) {
+function EventLink({ event }) {
 
-    if (event === undefined ||
-        event.originatorId === undefined ||
-        event.originatorVersion === undefined
-       ) {
+    if (event === undefined || event.id === undefined) {
         return <Skeleton width="25em"/>;
     }
 
-    const idversion = `${event.originatorId}/${event.originatorVersion}`;
-    const nameidversion = applicationName && `${applicationName}/${idversion}`;
-    const fullpath = nameidversion && `/event/${nameidversion}/${nameidversion}`;
+    const fullpath = `/event/${event.id}`;
 
     return (
         <span style={{
@@ -142,60 +147,52 @@ function EventLink({ applicationName, event }) {
           <IconButton
             aria-label="clipboard"
             size="small"
-            onClick={() => copy(nameidversion || idversion)}
+            onClick={() => copy(event.id)}
           >
             <SvgIcon fontSize="inherit">
               <path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/>
             </SvgIcon>
           </IconButton>
           <Box component="span" fontFamily="Monospace">
-            {fullpath !== undefined ? (
-                <Link
-                  component={RouterLink}
-                  to={fullpath}
-                >
-                  {nameidversion}
-                </Link>
-            ) : nameidversion || idversion}
+            <Link
+              component={RouterLink}
+              to={fullpath}
+            >
+              {event.id}
+            </Link>
           </Box>
         </span>
     );
 }
 
-function EventListItem({ applicationName, event, noExpand }) {
+function EventListItem({ event, avatar }) {
 
-    const idversion = event && `${event.originatorId}/${event.originatorVersion}`;
-    const nameidversion = applicationName && event && `${applicationName}/${idversion}`;
-
-    const match = useMatch(nameidversion || 'this-does-not-exist');
+    const match = useMatch(event && event.id || 'this-does-not-exist');
 
     return (
         <ListItem alignItems="flex-start" selected={!!match} >
-          <ListItemAvatar>{applicationName !== undefined ? (
-              <Avatar alt={applicationName} >
-                {applicationName.substring(0, 2).toUpperCase()}
-              </Avatar>
-          ) : <Skeleton variant="circle" width={40} height={40} />}
-          </ListItemAvatar>
+          {(event === undefined || avatar) && (
+              <ListItemAvatar>{event ? (
+                  avatar
+              ) : <Skeleton variant="circle" width={40} height={40} />}
+              </ListItemAvatar>
+          )}
           <ListItemText
             primary={<EventTopic event={event} />}
             secondary={
                 <>
-                  <EventLink
-                    applicationName={applicationName}
-                    event={event}
-                  />
+                  <EventLink event={event} />
                   <FriendlyTimeAgo date={event && event.timestamp} />
                 </>
             }
           />
-          {!noExpand && nameidversion && (
+          {event && (
               <ListItemSecondaryAction>
                 <IconButton
                   edge="end"
                   aria-label="more"
                   component={RouterLink}
-                  to={nameidversion}
+                  to={event.id}
                 >
                   <NavigateNextIcon />
                 </IconButton>
@@ -213,22 +210,11 @@ const FixedAccordionSummary = withStyles({
 })(AccordionSummary);
 
 function EventWithContext({
-    applicationName, originatorId, originatorVersion
+    event
 }) {
 
     // TODO: In some cases we already have partial data in cache before
     // we fire the request. Take that into account.
-
-
-    const { error, data, loading } = useQuery(GetEventContextQuery, {
-        variables: {
-            applicationName,
-            originatorId,
-            originatorVersion,
-        }
-    });
-
-    const event = data && data.event;
 
     return (
         <Box m={2}>
@@ -237,15 +223,12 @@ function EventWithContext({
             <EventTopic event={event} />
           </Typography>
 
-          <EventLink
-            applicationName={applicationName}
-            event={event}
-          />
+          <EventLink event={event} />
           <Typography variant="body2" color="textSecondary">
             <FriendlyTimeAgo date={event && event.timestamp} />
           </Typography>
 
-          <Box my={2}>
+          <Box my={0}>
             {event && event.stateInsight.filter(stateInsight => ![
                 "timestamp",
                 "originator_id",
@@ -317,135 +300,170 @@ function EventWithContext({
             )))}
           </Box>
 
-          <EventLog
-            applicationName={applicationName}
-            originatorId={originatorId}
-            originatorVersion={originatorVersion}
-            noExpand
-          />
-
         </Box>
     );
 
 }
 
 
-function EventRouteComponent({
-    applicationName, originatorId, originatorVersionString
+function HasMoreListSubheader({
+    more
 }) {
     return (
-        <EventWithContext
-          applicationName={applicationName}
-          originatorId={originatorId}
-          originatorVersion={parseInt(originatorVersionString, 10)}
-        />
+        <ListSubheader>
+          <Button
+            variant="text"
+            color="primary"
+            startIcon={<UnfoldMoreIcon />}
+          >
+            load {more || "more"}
+          </Button>
+        </ListSubheader>
     );
-
 }
 
-function NotificationLog() {
-    const [selection, setSelection] = useState(undefined);
-
-    const { error, data, loading } = useQuery(GetNotificationsQuery, {
-        pollInterval: 5000,
-        onCompleted: ({ applications }) => {
-            setSelection(applications.map(({ name }) => (
-                // Take default values from existing selection.
-                (selection || []).find(([k, s]) => k === name) || [name, false]
-            )));
-        },
-    });
-
-    const notifications = data && data.notifications;
-
-    // <Grid item xs={2}>
-    //   <Menu selection={selection} setSelection={setSelection} />
-    // </Grid>
-
+function EventLogSection({
+    events,
+    hasMoreTop,
+    loadMoreTop,
+    hasMoreBottom,
+    loadMoreBottom,
+    more,
+    avatar,
+}) {
     return (
-        <FriendlyList
-          component="nav"
-          aria-label="notifications"
-        >
-          {notifications !== undefined ? notifications.edges.map(edge => (
+        <List>
+          {hasMoreTop && (
+              <HasMoreListSubheader more={more} />
+          )}
+          {events !== undefined ? events.length ? events.map((event, i) => (
+              // State 1: We have events to display!
               <EventListItem
-                key={edge.cursor}
-                applicationName={edge.application && edge.application.name}
-                event={edge.node.event}
+                key={event ? event.id : i} // In case they're not loaded yet.
+                event={event}
+                avatar={avatar}
               />
-          )).reverse() : <DelayedRender>{[1, 2, 3].map((key) => (
+          )).reverse() : (
+              // State 2: We know there are no events.
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar>
+                    <HourglassEmptyIcon />
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={more ? `There are no ${more} for now.` : "Nothing here for now."}
+                  secondary="We will reload this for you when content becomes available."
+                />
+              </ListItem>
+          ) : <DelayedRender>{[1, 2, 3].map((key) => (
+              // State 3: We don't know if there will be any events.
               <EventListItem key={key} />
           ))}</DelayedRender>}
-        </FriendlyList>
+          {hasMoreBottom && (
+              <HasMoreListSubheader more={more} />
+          )}
+        </List>
     );
 }
+
+const PrimaryAvatar = withStyles((theme) => ({
+    root: {
+        color: theme.palette.primary.contrastText,
+        backgroundColor: theme.palette.primary.main,
+    },
+}))(Avatar);
+
+const SecondaryAvatar = withStyles((theme) => ({
+    root: {
+        color: theme.palette.secondary.contrastText,
+        backgroundColor: theme.palette.secondary.main,
+    },
+}))(Avatar);
 
 function EventLog({
-    applicationName, originatorId, originatorVersion, noExpand
+    currentEvent,
+    previousEvents,
+    previousEventsHasMoreTop,
+    previousEventsHasMoreBottom,
+    nextEvents,
+    nextEventsHasMoreTop,
+    nextEventsHasMoreBottom,
+    // Load more previous, and load more next go here.
+    // Also pass hasMore for both.
 }) {
 
-    //  TODO: The current event is probably in cache, we should get it!
-
-    const [showLaterEvents, setShowLaterEvents] = useState(false);
-
-    const { error, data, loading } = useQuery(GetEventLogQuery, {
-        pollInterval: 5000,
-        variables: {
-            applicationName,
-            originatorId,
-            originatorVersion,
-        }
-    });
-
-    if (data && data.event === null) {
-        return (
-            // TODO: Better message!
-            <p>There is no data for this event. </p>
-        );
-    }
-
-    const edges = data && data.event && [
-        ...data.event.previousEvents.edges,
-        {
-            cursor: "current",
-            node: {
-                ...data.event,
-                // No point in keeping those around!
-                previousEvents: [],
-                nextEvents: [],
-            }
-        },
-        ...data.event.nextEvents.edges,
-    ];
-
     return (
-        <FriendlyList
-          component="nav"
-          aria-label="notifications"
-        >
-          {edges !== undefined ? edges.map(edge => (
-              <EventListItem
-                key={edge.cursor}
-                applicationName={applicationName}
-                event={edge.node}
-                noExpand={noExpand}
+        <>
+          {(nextEvents !== null && (
+              <EventLogSection
+                events={nextEvents}
+                hasMoreTop={nextEventsHasMoreTop}
+                hasMoreBottom={nextEventsHasMoreBottom}
+                avatar={<PrimaryAvatar><ArrowUpwardIcon/></PrimaryAvatar>}
+                more="later events"
               />
-          )).reverse() : <DelayedRender>{[1, 2, 3].map((key) => (
-              <EventListItem key={key} />
-          ))}</DelayedRender>}
-        </FriendlyList>
+          ))}
+          {(currentEvent !== null && (
+              <EventLogSection
+                events={[currentEvent]}
+                avatar={<SecondaryAvatar><ArrowForwardIcon/></SecondaryAvatar>}
+              />
+          ))}
+          {(previousEvents !== null && (
+              <EventLogSection
+                events={previousEvents}
+                hasMoreTop={previousEventsHasMoreTop}
+                hasMoreBottom={previousEventsHasMoreBottom}
+                avatar={<PrimaryAvatar><ArrowDownwardIcon/></PrimaryAvatar>}
+                more="earlier events"
+              />
+          ))}
+        </>
     );
 
 }
 
-function SplitPane({ children }) {
+
+function LogViewer({
+    currentEvent,
+    previousEvents,
+    previousEventsHasMoreTop,
+    previousEventsHasMoreBottom,
+    nextEvents,
+    nextEventsHasMoreTop,
+    nextEventsHasMoreBottom,
+    // Load more previous, and load more next go here.
+    // Also pass hasMore for both.
+}) {
+
+    // This handles both eventlog and notificationlog
+
+    // This also handles state regarding:
+    // - preview hashes.
+
     return (
         <Grid container>
-          {children.map((child, i) => (
-              <Grid key={i} item md={6} >
-                {child}
-              </Grid>
-          ))}
+          <Grid item xs={12} md={6} >
+            <EventLog
+              currentEvent={currentEvent}
+              previousEvents={previousEvents}
+              nextEvents={nextEvents}
+              previousEventsHasMoreTop={previousEventsHasMoreTop}
+              previousEventsHasMoreBottom={previousEventsHasMoreBottom}
+              nextEventsHasMoreTop={nextEventsHasMoreTop}
+              nextEventsHasMoreBottom={nextEventsHasMoreBottom}
+            />
+          </Grid>
+          <Grid item xs={12} md={6} >
+              {currentEvent !== null ? (
+                  <EventWithContext
+                    event={currentEvent}
+                  />
+              ) : (
+                  <span>Event details will show here.</span>
+              )}
+          </Grid>
         </Grid>
     );
 }
@@ -453,40 +471,52 @@ function SplitPane({ children }) {
 function EventLogRouteComponent({
     applicationName, originatorId, originatorVersionString
 }) {
+
+    const { error, data, loading } = useQuery(GetEventLogQuery, {
+        pollInterval: 5000,
+        variables: {
+            applicationName,
+            originatorId,
+            originatorVersion: parseInt(originatorVersionString, 10),
+        }
+    });
+
     return (
-        <SplitPane>
-          <EventLog
-            applicationName={applicationName}
-            originatorId={originatorId}
-            originatorVersion={parseInt(originatorVersionString, 10)}
-          />
-          <Router>
-            <EventRouteComponent
-              path=":applicationName/:originatorId/:originatorVersionString"
-            />
-          </Router>
-        </SplitPane>
+        <LogViewer
+          currentEvent={data && data.event}
+          previousEvents={data && data.event && (
+              data.event.previousEvents.edges.map(edge => edge.node))}
+          nextEvents={data && data.event && (
+              data.event.nextEvents.edges.map(edge => edge.node))}
+        />
     );
 }
 
 function NotificationLogRouteComponent() {
+
     //  Here we will parse application names from the url filter if any.
+
+    const { error, data, loading } = useQuery(GetNotificationsQuery, {
+        pollInterval: 5000,
+    });
+
     return (
-        <SplitPane>
-          <NotificationLog />
-          <Router>
-            <EventRouteComponent
-              path=":applicationName/:originatorId/:originatorVersionString"
-            />
-          </Router>
-        </SplitPane>
+        <LogViewer
+          currentEvent={null}
+          previousEvents={data && data.notifications && (
+              data.notifications.edges.filter(
+                  edge => !!edge.node.event
+              ).map(edge => edge.node.event))}
+          nextEvents={null}
+        />
     );
 }
 
 function App() {
     return (
-        <>
-          <Box mt={2} mx={2}>
+        <Container fixed>
+
+          <Box my={2}>
             <Button
               variant="text"
               color="primary"
@@ -496,6 +526,8 @@ function App() {
             >
               all notifications
             </Button>
+
+            <Divider />
           </Box>
 
           {/* TODO: We actually want to have both panes be handled by the same component. */}
@@ -514,7 +546,8 @@ function App() {
               path="/event/:applicationName/:originatorId/:originatorVersionString/*"
             />
           </Router>
-        </>
+
+        </Container>
     );
 }
 

@@ -1,6 +1,7 @@
 fragment EventPreview on Event {
   id
   timestamp
+  applicationName
   originatorId
   originatorVersion
   topic
