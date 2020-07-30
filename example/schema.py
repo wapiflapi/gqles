@@ -22,6 +22,8 @@ state_insight = ariadne.InterfaceType("StateInsight")
 
 query = ariadne.ObjectType("Query")
 application = ariadne.ObjectType("Application")
+originator = ariadne.ObjectType("Originator")
+insight = ariadne.ObjectType("Insight")
 event = ariadne.ObjectType("Event")
 
 
@@ -222,6 +224,47 @@ async def resolve_query_event(
     )
 
 
+def get_originator_data(application, originator_id):
+
+    event = application.event_store.get_most_recent_event(
+        originator_id=originator_id,
+    )
+
+    if event is None:
+        return None
+
+    return dict(
+        application=application,
+        originatorId=event.originator_id,
+        last=lambda _, e=event: get_event_data(
+            application,
+            e,
+            *application.event_store.event_mapper.get_item_topic_and_state(
+                e.__class__, e.__dict__,
+            ),
+        ),
+    )
+
+
+
+@query.field("insights")
+async def resolve_query_insights(obj, info, uuids):
+    system_runner = await example.application.get_system_runner()
+
+    # TODO: This is very naive, how do we batch this?
+    def resolve_insight(candidate):
+        for application in system_runner.processes.values():
+            originator = get_originator_data(application, candidate)
+            if not originator:
+                continue
+            return dict(
+                applicationName=application.name,
+                originator=originator,
+            )
+
+    return [resolve_insight(candidate) for candidate in uuids]
+
+
 @application.field("id")
 async def resolve_applications_id(obj, info):
     return obj.name
@@ -316,10 +359,20 @@ def paginate_events(
     )
 
 
-@application.field("events")
+@application.field("originator")
 async def resolve_applications_events(
-        obj, info, originatorId, last, first=None, before=None, after=None,
+        obj, info, originatorId,
 ):
+    return get_originator_data(obj, originatorId)
+
+
+@originator.field("events")
+async def resolve_applications_events(
+        obj, info, last, first=None, before=None, after=None,
+):
+
+    application = obj["application"]
+    originatorId = obj["originatorId"]
 
     @from_base64
     def from_cursor(cursor):
@@ -330,24 +383,24 @@ async def resolve_applications_events(
         return str(position) if position is not None else None
 
     events, has_prev, has_next = paginate_events(
-        obj.event_store, originatorId,
+        application.event_store, originatorId,
         last=last, first=first,
         before=from_cursor(before),
         after=from_cursor(after),
     )
 
     edges = [dict(
-        cursor=to_cursor(event.originator_version),
+        cursor=to_cursor(originator_version),
         # Careful with the lambda scoping! We need to make a copy
         # of the current notification in the lambda's scope.
         node=lambda _, e=event: get_event_data(
-            obj,
+            application,
             e,
-            *obj.event_store.event_mapper.get_item_topic_and_state(
+            *application.event_store.event_mapper.get_item_topic_and_state(
                 e.__class__, e.__dict__,
             ),
         ),
-    ) for event in events]
+    ) for (originator_version, event) in events]
 
     return dict(
         edges=edges,
@@ -532,6 +585,8 @@ schema = ariadne.make_executable_schema(
     *example.scalars.types,
     query,
     application,
+    originator,
     event,
     state_insight,
+    insight,
 )

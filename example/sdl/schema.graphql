@@ -14,20 +14,35 @@ type Query {
     applicationName: String!,
     originatorId: UUID!,
     originatorVersion: Int!,
-  ): Event,
+  ): Event
 
+  insights(
+    uuids: [UUID!]!,
+  ): [Insight]!
 }
 
-type Application {
-  id: ID!
-  name: String!
+type Insight {
+  applicationName: String!
+  originator: Originator
+}
+
+type Originator {
+  originatorId: UUID!
+  last: Event!
   events(
-    originatorId: UUID!,
     last: Int = 20,
     before: String,
     first: Int,
     after: String,
   ): EventConnection!
+}
+
+type Application {
+  id: ID!
+  name: String!
+  originator(
+    originatorId: UUID!
+  ): Originator
   notifications(
     last: Int = 20,
     before: String,
