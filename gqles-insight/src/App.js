@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
 import { ApolloClient, ApolloProvider, InMemoryCache, useQuery } from '@apollo/client';
 import { ApolloLink } from 'apollo-link';
@@ -20,6 +20,8 @@ import ArrowUpwardIcon from '@material-ui/icons/ArrowUpward';
 import Avatar from '@material-ui/core/Avatar';
 import Button from '@material-ui/core/Button';
 import Box from '@material-ui/core/Box';
+import Card from '@material-ui/core/Card';
+import CardHeader from '@material-ui/core/CardHeader';
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft';
 import ClickAwayListener from '@material-ui/core/ClickAwayListener';
 import Container from '@material-ui/core/Container';
@@ -43,6 +45,12 @@ import SvgIcon from '@material-ui/core/SvgIcon';
 import Typography from '@material-ui/core/Typography';
 import UnfoldMoreIcon from '@material-ui/icons/UnfoldMore';
 
+import {
+    // TODO: This should not be used in production.
+    // https://github.com/mui-org/material-ui/issues/13394
+    unstable_createMuiStrictModeTheme as createMuiTheme,
+} from '@material-ui/core/styles';
+
 import { Router, Link as RouterLink, useMatch, Redirect } from "@reach/router";
 
 import copy from 'clipboard-copy';
@@ -63,9 +71,6 @@ const client = new ApolloClient({
 
 const GetNotificationsQuery = loader(
     './GetNotifications.graphql');
-
-const GetEventContextQuery = loader(
-    './GetEventContext.graphql');
 
 const GetEventLogQuery = loader(
     './GetEventLog.graphql');
@@ -124,7 +129,17 @@ function FriendlyList({children, empty, ...props}) {
 function EventTopic({ event }) {
     return (event ? (
         <Box component="span" fontFamily="Monospace">
-          {event.topic}
+          {event.topic.split("#").map((sub, i) => (i === 0 ? (
+              <small key={i} style={{display: "inline-block"}}>
+                {sub}
+              </small>
+
+          ) : (
+              <span key={i} style={{display: "inline-block"}}>
+                {`#${sub}`}
+              </span>
+          )
+          ))}
         </Box>
     ) : (
         <Skeleton width="25em"/>
@@ -209,98 +224,117 @@ const FixedAccordionSummary = withStyles({
     },
 })(AccordionSummary);
 
+function AutoSelectCode({ children, ...props }) {
+    return (
+        <Typography noWrap {...props}>
+          <Box
+            component="span"
+            fontFamily="Monospace"
+            style={{
+                userSelect: "all",
+            }}
+            onClick={(event) => event.stopPropagation()}
+            onFocus={(event) => event.stopPropagation()}
+          >
+            {children}
+          </Box>
+        </Typography>
+
+    );
+}
+
+function StateInsight({
+    stateInsight
+}) {
+
+    return (stateInsight ? stateInsight.filter(stateInsight => ![
+        "timestamp",
+        "originator_id",
+        "originator_version",
+        "originator_topic",
+    ].includes(stateInsight.key)).map(((stateInsight, i) => (
+        <Accordion key={i} elevation={0}>
+          <FixedAccordionSummary
+            style={{minWidth: 0}}
+            expandIcon={<ExpandMoreIcon />}
+            style={{userSelect: 'text'}}
+          >
+            <Grid container my={2} spacing={2}>
+              {/* We're disabling click & focus on the fields, */}
+              {/* we want to provide easy selection of keys & values. */}
+
+              <Grid item xs={4} >
+                <AutoSelectCode noWrap>
+                  {stateInsight.key}
+                </AutoSelectCode>
+              </Grid>
+
+              <Grid item xs={8}>
+                <AutoSelectCode noWrap color="textSecondary">
+                  {stateInsight.text}
+                </AutoSelectCode>
+              </Grid>
+
+            </Grid>
+
+          </FixedAccordionSummary>
+
+          <AccordionDetails>
+            <JSONView
+              data={{[stateInsight.key]: (
+                  // FIXME: We should catch errors from JSON.parse!
+                  stateInsight.json ? JSON.parse(stateInsight.json)
+                      : stateInsight.text
+              )}}
+              hideRoot={true}
+              sortObjectKeys={true}
+              shouldExpandNode={(keyName, data, level) => level < 2}
+            />
+          </AccordionDetails>
+        </Accordion>
+    ))) : stateInsight === null ? (
+        // TODO: better message.
+        <span>Failed to load state insight.</span>
+    ) : stateInsight === undefined ? (
+        <Box m={2}>
+          <Grid container my={2} spacing={2}>
+            <Grid item xs={4} >
+              <Skeleton width="5em"/>
+            </Grid>
+            <Grid item xs={8}>
+              <Skeleton width="15em"/>
+            </Grid>
+          </Grid>
+        </Box>
+    ) : undefined);
+
+}
+
 function EventWithContext({
-    event
+    event,
+    avatar
 }) {
 
     // TODO: In some cases we already have partial data in cache before
     // we fire the request. Take that into account.
 
     return (
-        <Box m={2}>
+        <Card>
 
-          <Typography variant="subtitle1" component="h2">
-            <EventTopic event={event} />
-          </Typography>
+          <CardHeader
+            avatar={avatar}
+            title={<EventTopic event={event} />}
+            subheader={
+                <>
+                  <EventLink event={event} />
+                  <FriendlyTimeAgo date={event && event.timestamp} />
+                </>
+            }
+          />
 
-          <EventLink event={event} />
-          <Typography variant="body2" color="textSecondary">
-            <FriendlyTimeAgo date={event && event.timestamp} />
-          </Typography>
+          <StateInsight stateInsight={event && event.stateInsight} />
 
-          <Box my={0}>
-            {event && event.stateInsight.filter(stateInsight => ![
-                "timestamp",
-                "originator_id",
-                "originator_version",
-                "originator_topic",
-            ].includes(stateInsight.key)).map(((stateInsight, i) => (
-                <Accordion key={i}>
-                  <FixedAccordionSummary
-                    style={{minWidth: 0}}
-                    expandIcon={<ExpandMoreIcon />}
-                    style={{userSelect: 'text'}}
-                  >
-                    <Grid container my={2} spacing={2}>
-                      {/* We're disabling click & focus on the fields, */}
-                      {/* we want to provide easy selection of keys & values. */}
-
-                      <Grid item xs={4} >
-                        <Typography noWrap>
-                          <Box
-                            component="span"
-                            fontFamily="Monospace"
-                            style={{
-                                userSelect: "all",
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            onFocus={(event) => event.stopPropagation()}
-                          >
-                            {stateInsight.key}
-                          </Box>
-                        </Typography>
-                      </Grid>
-
-                      <Grid item xs={8}>
-                        <Typography noWrap color="textSecondary">
-                          <Box
-                            component="span"
-                            fontFamily="Monospace"
-                            style={{
-                                userSelect: "all",
-                            }}
-                            onClick={(event) => event.stopPropagation()}
-                            onFocus={(event) => event.stopPropagation()}
-                          >
-                            {stateInsight.text}
-                          </Box>
-                        </Typography>
-                      </Grid>
-
-                    </Grid>
-
-                  </FixedAccordionSummary>
-
-                  {/* TODO: We want an api we can pass the uuids to and it tells us if it is anything usefull. Basically matching app, and returning position 0. */}
-
-                  <AccordionDetails>
-                    <JSONView
-                // FIXME: We should catch errors from JSON.parse!
-                      data={{[stateInsight.key]: (
-                          stateInsight.json ? JSON.parse(stateInsight.json)
-                              : stateInsight.text
-                      )}}
-                      hideRoot={true}
-                      sortObjectKeys={true}
-                      shouldExpandNode={(keyName, data, level) => level < 2}
-                    />
-                  </AccordionDetails>
-                </Accordion>
-
-            )))}
-          </Box>
-
-        </Box>
+        </Card>
     );
 
 }
@@ -331,6 +365,10 @@ function EventLogSection({
     more,
     avatar,
 }) {
+
+    // TODO: We should be using react-window for virtualized lists.
+    // https://material-ui.com/components/lists/#virtualized-list
+
     return (
         <List>
           {hasMoreTop && (
@@ -442,8 +480,19 @@ function LogViewer({
     // This also handles state regarding:
     // - preview hashes.
 
+    const match = useMatch(":applicationName/:originatorId/:originatorVersionString");
+
+    const previewEvent = useMemo(() => [
+        currentEvent, ...(previousEvents || []), ...(nextEvents || []),
+    ].find((event) => (
+        match && event &&
+            match.applicationName === event.applicationName &&
+            match.originatorId === event.originatorId &&
+            parseInt(match.originatorVersionString, 10) === event.originatorVersion
+    )) || currentEvent, [match, currentEvent, previousEvents, nextEvents]);
+
     return (
-        <Grid container>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6} >
             <EventLog
               currentEvent={currentEvent}
@@ -456,13 +505,14 @@ function LogViewer({
             />
           </Grid>
           <Grid item xs={12} md={6} >
-              {currentEvent !== null ? (
-                  <EventWithContext
-                    event={currentEvent}
-                  />
-              ) : (
-                  <span>Event details will show here.</span>
-              )}
+            {previewEvent !== null ? (
+                <EventWithContext
+                event={previewEvent}
+                />
+            ) : (
+                // It's okay if this looks empty, but we could add a splash!
+                undefined
+            )}
           </Grid>
         </Grid>
     );
@@ -480,6 +530,18 @@ function EventLogRouteComponent({
             originatorVersion: parseInt(originatorVersionString, 10),
         }
     });
+
+    const match = useMatch(":applicationName/:originatorId/:originatorVersionString");
+
+    if (!match) {
+        return (
+            <Redirect
+              noThrow
+              from="/"
+              to={`${applicationName}/${originatorId}/${originatorVersionString}`}
+            />
+        );
+    }
 
     return (
         <LogViewer

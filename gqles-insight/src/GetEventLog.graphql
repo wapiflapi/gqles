@@ -1,4 +1,3 @@
-#import "EventContext.graphql"
 #import "EventLog.graphql"
 
 query GetEventLog(
@@ -11,7 +10,7 @@ query GetEventLog(
     originatorId: $originatorId,
     originatorVersion: $originatorVersion
   ) {
-    ...EventContext
+    ...EventPreview
     ...EventLog
   }
 }

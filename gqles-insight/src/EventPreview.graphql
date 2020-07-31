@@ -5,4 +5,17 @@ fragment EventPreview on Event {
   originatorId
   originatorVersion
   topic
+  stateInsight {
+    key
+    text
+    ...on StateInsightUUID {
+      uuid
+    }
+    ...on StateInsightDatetime {
+      datetime
+    }
+    ...on StateInsightJSON {
+      json
+    }
+  }
 }
