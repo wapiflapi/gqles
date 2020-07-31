@@ -22,6 +22,7 @@ import Button from '@material-ui/core/Button';
 import Box from '@material-ui/core/Box';
 import Card from '@material-ui/core/Card';
 import CardHeader from '@material-ui/core/CardHeader';
+import CheckBoxIcon from '@material-ui/icons/CheckBox';
 import ChevronLeftIcon from '@material-ui/icons/ChevronLeft';
 import ClickAwayListener from '@material-ui/core/ClickAwayListener';
 import Container from '@material-ui/core/Container';
@@ -44,21 +45,24 @@ import Skeleton from '@material-ui/lab/Skeleton';
 import SvgIcon from '@material-ui/core/SvgIcon';
 import Typography from '@material-ui/core/Typography';
 import UnfoldMoreIcon from '@material-ui/icons/UnfoldMore';
+import useMediaQuery from '@material-ui/core/useMediaQuery';
 
 import {
     // TODO: This should not be used in production.
     // https://github.com/mui-org/material-ui/issues/13394
+    useTheme,
     unstable_createMuiStrictModeTheme as createMuiTheme,
 } from '@material-ui/core/styles';
+
 
 import { Router, Link as RouterLink, useMatch, Redirect } from "@reach/router";
 
 import copy from 'clipboard-copy';
 import TimeAgo from 'react-timeago';
+import Sticky from 'react-stickynode';
 
 import DelayedRender from './DelayedRender';
 import JSONView, { loadB64JSONOrNothing } from './JSONTree.js';
-
 
 const client = new ApolloClient({
     cache: new InMemoryCache(),
@@ -75,6 +79,8 @@ const GetNotificationsQuery = loader(
 const GetEventLogQuery = loader(
     './GetEventLog.graphql');
 
+const GetInsightsQuery = loader(
+    './GetInsights.graphql');
 
 
 function FriendlyTimeAgo({ date }) {
@@ -239,62 +245,78 @@ function AutoSelectCode({ children, ...props }) {
             {children}
           </Box>
         </Typography>
-
     );
 }
 
 function StateInsight({
-    stateInsight
+    stateInsight,
+    insights,
 }) {
 
-    return (stateInsight ? stateInsight.filter(stateInsight => ![
+    const usefulStateInsight = stateInsight && stateInsight.filter(stateInsight => ![
         "timestamp",
         "originator_id",
         "originator_version",
         "originator_topic",
-    ].includes(stateInsight.key)).map(((stateInsight, i) => (
-        <Accordion key={i} elevation={0}>
-          <FixedAccordionSummary
-            style={{minWidth: 0}}
-            expandIcon={<ExpandMoreIcon />}
-            style={{userSelect: 'text'}}
-          >
-            <Grid container my={2} spacing={2}>
-              {/* We're disabling click & focus on the fields, */}
-              {/* we want to provide easy selection of keys & values. */}
+    ].includes(stateInsight.key));
 
-              <Grid item xs={4} >
-                <AutoSelectCode noWrap>
-                  {stateInsight.key}
-                </AutoSelectCode>
-              </Grid>
+    return (usefulStateInsight && usefulStateInsight.length ? (
+        usefulStateInsight.map(((stateInsight, i) => (
+            <Accordion key={i} elevation={0}>
+              <FixedAccordionSummary
+                style={{minWidth: 0}}
+                expandIcon={<ExpandMoreIcon />}
+                style={{userSelect: 'text'}}
+              >
+                <Grid container my={2} spacing={2}>
+                  {/* We're disabling click & focus on the fields, */}
+                  {/* we want to provide easy selection of keys & values. */}
 
-              <Grid item xs={8}>
-                <AutoSelectCode noWrap color="textSecondary">
-                  {stateInsight.text}
-                </AutoSelectCode>
-              </Grid>
+                  <Grid item xs={4} >
+                    <AutoSelectCode noWrap>
+                      {stateInsight.key}
+                    </AutoSelectCode>
+                  </Grid>
 
-            </Grid>
+                  <Grid item xs={8}>
+                    {insights && stateInsight.uuid &&
+                     insights[stateInsight.uuid] &&
+                     insights[stateInsight.uuid].originator &&
+                     insights[stateInsight.uuid].originator.last ? (
+                         <EventLink
+                           event={insights[stateInsight.uuid].originator.last}
+                         />
+                     ) : (
+                         <AutoSelectCode noWrap color="textSecondary">
+                           {stateInsight.text}
+                         </AutoSelectCode>
+                     )}
+                  </Grid>
 
-          </FixedAccordionSummary>
+                </Grid>
 
-          <AccordionDetails>
-            <JSONView
-              data={{[stateInsight.key]: (
-                  // FIXME: We should catch errors from JSON.parse!
-                  stateInsight.json ? JSON.parse(stateInsight.json)
-                      : stateInsight.text
-              )}}
-              hideRoot={true}
-              sortObjectKeys={true}
-              shouldExpandNode={(keyName, data, level) => level < 2}
-            />
-          </AccordionDetails>
-        </Accordion>
-    ))) : stateInsight === null ? (
-        // TODO: better message.
-        <span>Failed to load state insight.</span>
+              </FixedAccordionSummary>
+
+              <AccordionDetails>
+                <JSONView
+                  data={{[stateInsight.key]: (
+                      // FIXME: We should catch errors from JSON.parse!
+                      stateInsight.json ? JSON.parse(stateInsight.json)
+                          : stateInsight.text
+                  )}}
+                  hideRoot={true}
+                  sortObjectKeys={true}
+                  shouldExpandNode={(keyName, data, level) => level < 2}
+                />
+              </AccordionDetails>
+            </Accordion>
+        )))
+    ) : usefulStateInsight && usefulStateInsight.length === 0 ? (
+        <Box m={2} color="text.secondary">
+          No complex state.
+        </Box>
+    )  : stateInsight === null ? (
+        <NotFound />
     ) : stateInsight === undefined ? (
         <Box m={2}>
           <Grid container my={2} spacing={2}>
@@ -312,7 +334,8 @@ function StateInsight({
 
 function EventWithContext({
     event,
-    avatar
+    avatar,
+    insights,
 }) {
 
     // TODO: In some cases we already have partial data in cache before
@@ -332,7 +355,10 @@ function EventWithContext({
             }
           />
 
-          <StateInsight stateInsight={event && event.stateInsight} />
+          <StateInsight
+            stateInsight={event && event.stateInsight}
+            insights={insights}
+          />
 
         </Card>
     );
@@ -463,6 +489,22 @@ function EventLog({
 }
 
 
+function NotFound() {
+    return (
+        <Box m={2}>
+          <Grid spacing={2} container direction="row" alignItems="center" justify="center">
+            <Grid item container xs={12} justify="center">
+              <SearchIcon fontSize="large" />
+            </Grid>
+            <Grid item>
+              We couldn't find what goes here.
+            </Grid>
+          </Grid>
+        </Box>
+    );
+}
+
+
 function LogViewer({
     currentEvent,
     previousEvents,
@@ -474,25 +516,66 @@ function LogViewer({
     // Load more previous, and load more next go here.
     // Also pass hasMore for both.
 }) {
-
-    // This handles both eventlog and notificationlog
-
-    // This also handles state regarding:
-    // - preview hashes.
+    const theme = useTheme();
+    const split = useMediaQuery(theme.breakpoints.up('md'));
 
     const match = useMatch(":applicationName/:originatorId/:originatorVersionString");
 
-    const previewEvent = useMemo(() => [
-        currentEvent, ...(previousEvents || []), ...(nextEvents || []),
-    ].find((event) => (
-        match && event &&
+    const knownEvents = useMemo(() => [
+        ...(currentEvent ? [currentEvent] : []),
+        ...(previousEvents || []),
+        ...(nextEvents || []),
+    ], [currentEvent, previousEvents, nextEvents]);
+
+    const previewEvent = useMemo(() => match ? knownEvents.find((event) => (
+        event &&
             match.applicationName === event.applicationName &&
             match.originatorId === event.originatorId &&
             parseInt(match.originatorVersionString, 10) === event.originatorVersion
-    )) || currentEvent, [match, currentEvent, previousEvents, nextEvents]);
+    )) : null, [match, knownEvents]);
+
+    const previewNotFound = match && previewEvent === undefined &&
+          !(previousEvents === undefined ||
+            nextEvents === undefined ||
+            currentEvent === undefined);
+
+    const uuids = useMemo(() => Array.from(new Set([].concat(...knownEvents.map(event => (
+        event && event.stateInsight && event.stateInsight.map(
+            stateInsight => stateInsight.uuid
+        ).filter(uuid => !!uuid)
+    ))))), [knownEvents]);
+
+    const { error, data, loading } = useQuery(GetInsightsQuery, {
+        variables: {
+            uuids,
+        }
+    });
+
+    const insightsMap = data && Object.fromEntries(
+        data.insights.map((insight, i) => [uuids[i], insight])
+    );
+
+    // TODO: Add close button for right pane in that case.
+    // When on mobile the card should be full screen.
+
 
     return (
-        <Grid container spacing={2}>
+        <Grid container spacing={2} direction="row-reverse">
+          <Grid item xs={12} md={6} zeroMinWidth>
+            <Sticky enabled={split} top={16}>
+              {previewNotFound ? (
+                  <NotFound />
+              ) : match || currentEvent ? (
+                  <EventWithContext
+                    event={previewEvent || currentEvent || undefined}
+                    insights={insightsMap}
+                  />
+              ) : (
+                  // It's okay if this looks empty, but we could add a splash!
+                  undefined
+              )}
+            </Sticky>
+          </Grid>
           <Grid item xs={12} md={6} >
             <EventLog
               currentEvent={currentEvent}
@@ -504,16 +587,6 @@ function LogViewer({
               nextEventsHasMoreBottom={nextEventsHasMoreBottom}
             />
           </Grid>
-          <Grid item xs={12} md={6} >
-            {previewEvent !== null ? (
-                <EventWithContext
-                event={previewEvent}
-                />
-            ) : (
-                // It's okay if this looks empty, but we could add a splash!
-                undefined
-            )}
-          </Grid>
         </Grid>
     );
 }
@@ -521,6 +594,8 @@ function LogViewer({
 function EventLogRouteComponent({
     applicationName, originatorId, originatorVersionString
 }) {
+
+    // TODO: Handle load more!
 
     const { error, data, loading } = useQuery(GetEventLogQuery, {
         pollInterval: 5000,
@@ -557,6 +632,7 @@ function EventLogRouteComponent({
 function NotificationLogRouteComponent() {
 
     //  Here we will parse application names from the url filter if any.
+    // TODO: Handle load more!
 
     const { error, data, loading } = useQuery(GetNotificationsQuery, {
         pollInterval: 5000,
@@ -591,14 +667,6 @@ function App() {
 
             <Divider />
           </Box>
-
-          {/* TODO: We actually want to have both panes be handled by the same component. */}
-          {/* The opposite of what we have now, one use case: */}
-          {/* - prev/next buttons above the right pane's context, navigating in the right pane. */}
-
-          {/* Also, that way we can have the left-list be md=5 and xs=hidden when no space because of right pane, until right pane is closed. */}
-
-          {/* TODO: Add close button for right pane in that case. */}
 
           <Router>
             <NotificationLogRouteComponent

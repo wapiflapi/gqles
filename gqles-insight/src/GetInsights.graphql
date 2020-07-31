@@ -1,0 +1,17 @@
+#import "EventPreview.graphql"
+
+query GetInsights(
+  $uuids: [UUID!]!,
+) {
+  insights(
+    uuids: $uuids,
+  ) {
+    applicationName,
+    originator {
+      originatorId,
+      last {
+        ...EventPreview
+      }
+    }
+  }
+}
