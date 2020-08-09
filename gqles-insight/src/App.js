@@ -106,9 +106,6 @@ function FriendlyTimeAgo({ date }) {
     ));
 }
 
-
-
-
 function FriendlyList({children, empty, ...props}) {
     return (
         !Array.isArray(children) || children.length ?
@@ -338,9 +335,6 @@ function EventWithContext({
     insights,
 }) {
 
-    // TODO: In some cases we already have partial data in cache before
-    // we fire the request. Take that into account.
-
     return (
         <Card>
 
@@ -391,9 +385,6 @@ function EventLogSection({
     more,
     avatar,
 }) {
-
-    // TODO: We should be using react-window for virtualized lists.
-    // https://material-ui.com/components/lists/#virtualized-list
 
     return (
         <List>
@@ -457,6 +448,8 @@ function EventLog({
     // Also pass hasMore for both.
 }) {
 
+
+
     return (
         <>
           {(nextEvents !== null && (
@@ -469,10 +462,12 @@ function EventLog({
               />
           ))}
           {(currentEvent !== null && (
-              <EventLogSection
-                events={[currentEvent]}
-                avatar={<SecondaryAvatar><ArrowForwardIcon/></SecondaryAvatar>}
-              />
+              <DelayedRender skip={currentEvent !== undefined}>
+                <EventLogSection
+                  events={[currentEvent]}
+                  avatar={<SecondaryAvatar><ArrowForwardIcon/></SecondaryAvatar>}
+                />
+              </DelayedRender>
           ))}
           {(previousEvents !== null && (
               <EventLogSection
@@ -539,6 +534,8 @@ function LogViewer({
             nextEvents === undefined ||
             currentEvent === undefined);
 
+    const shownEvent = previewEvent || currentEvent || undefined;
+
     const uuids = useMemo(() => Array.from(new Set([].concat(...knownEvents.map(event => (
         event && event.stateInsight && event.stateInsight.map(
             stateInsight => stateInsight.uuid
@@ -555,9 +552,6 @@ function LogViewer({
         data.insights.map((insight, i) => [uuids[i], insight])
     );
 
-    // TODO: Add close button for right pane in that case.
-    // When on mobile the card should be full screen.
-
 
     return (
         <Grid container spacing={2} direction="row-reverse">
@@ -566,10 +560,12 @@ function LogViewer({
               {previewNotFound ? (
                   <NotFound />
               ) : match || currentEvent ? (
-                  <EventWithContext
-                    event={previewEvent || currentEvent || undefined}
-                    insights={insightsMap}
-                  />
+                  <DelayedRender skip={shownEvent !== undefined} >
+                    <EventWithContext
+                      event={shownEvent}
+                      insights={insightsMap}
+                    />
+                  </DelayedRender>
               ) : (
                   // It's okay if this looks empty, but we could add a splash!
                   undefined
@@ -595,7 +591,6 @@ function EventLogRouteComponent({
     applicationName, originatorId, originatorVersionString
 }) {
 
-    // TODO: Handle load more!
 
     const { error, data, loading } = useQuery(GetEventLogQuery, {
         pollInterval: 5000,
@@ -632,7 +627,7 @@ function EventLogRouteComponent({
 function NotificationLogRouteComponent() {
 
     //  Here we will parse application names from the url filter if any.
-    // TODO: Handle load more!
+
 
     const { error, data, loading } = useQuery(GetNotificationsQuery, {
         pollInterval: 5000,
@@ -691,3 +686,25 @@ function AppWithProviders() {
 }
 
 export default AppWithProviders;
+
+
+
+// TODO: Handle load more for logs!
+// https://material-ui.com/components/lists/#virtualized-list
+
+// TODO: In some cases we already have partial data in cache before
+// we fire the request. Take that into account.
+// Looks like useQuery has stuff for partials, but in our case it
+// won't match the ids I think, look into it!
+
+// TODO: Write down the rules regarding skeletons and delayed rendering
+// there is something like str of container uses repr of items
+// in the sense that a component always renders content or skeletons
+// and the containers have to implement the delay logic.
+
+// TODO: Add close button for right pane in that case.
+// When on mobile the card should be full screen.
+
+// TODO: When loading new data, during the delay the skeletons are not
+// yet shown we should keep the old data around if we have any.
+// The problem is it looks like the router resets our state.

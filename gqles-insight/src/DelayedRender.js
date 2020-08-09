@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 
-const useDelayedRender = delay => {
+const useDelayedRender = (delay, skip) => {
     const [delayed, setDelayed] = useState(true);
     useEffect(() => {
         const timeout = setTimeout(() => setDelayed(false), delay || 100);
         return () => clearTimeout(timeout);
     }, [delay]);
-    return fn => !delayed && fn();
+    return fn => (!delayed || skip) ? fn() : null;
 };
 
-const DelayedRender = ({ delay, children }) => useDelayedRender(delay)(() => children);
+const DelayedRender = ({ skip, delay, children }) =>
+      useDelayedRender(skip, delay)(() => children);
 
 export default DelayedRender;
