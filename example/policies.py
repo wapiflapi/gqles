@@ -17,27 +17,25 @@ class Orders(ProcessApplication):
     def policy(self, repository, event):
         """Do nothing by default."""
 
+    # TODO: What does it mean when a policy returns?
+    # Policies must return new aggregates to the caller, but do not
+    # need to return existing aggregates that have been accessed or
+    # changed.
+    # TODO: Can there be a linter or something to catch that?
+
     @policy.register(example.domain.CreateOrder.Created)
-    def _(self, repository, event):
-        return self._create_order(command_id=event.originator_id)
+    def _create_order(self, repository, event):
+        return example.domain.Order.create(
+            command_id=event.originator_id,
+        )
 
     @policy.register(example.domain.Reservation.Created)
-    def _(self, repository, event):
-        self._set_order_is_reserved(repository, event)
-
-    @policy.register(example.domain.Payment.Created)
-    def _(self, repository, event):
-        self._set_order_is_paid(repository, event)
-
-    @staticmethod
-    def _create_order(command_id):
-        return example.domain.Order.create(command_id=command_id)
-
     def _set_order_is_reserved(self, repository, event):
         order = repository[event.order_id]
         assert not order.is_reserved
         order.set_is_reserved(event.originator_id)
 
+    @policy.register(example.domain.Payment.Created)
     def _set_order_is_paid(self, repository, event):
         order = repository[event.order_id]
         assert not order.is_paid
@@ -51,12 +49,10 @@ class Reservations(ProcessApplication):
         """Do nothing by default."""
 
     @policy.register(example.domain.Order.Created)
-    def _(self, repository, event):
-        return self._create_reservation(event.originator_id)
-
-    @staticmethod
-    def _create_reservation(order_id):
-        return example.domain.Reservation.create(order_id=order_id)
+    def _create_reservation(self, order_id):
+        return example.domain.Reservation.create(
+            order_id=event.originator_id,
+        )
 
 
 class Payments(ProcessApplication):
@@ -66,19 +62,23 @@ class Payments(ProcessApplication):
         """Do nothing by default."""
 
     @policy.register(example.domain.Order.Reserved)
-    def _(self, repository, event):
-        order_id = event.originator_id
-        return self._create_payment(order_id)
-
-    @staticmethod
-    def _create_payment(order_id):
-        return example.domain.Payment.create(order_id=order_id)
+    def _create_payment(self, order_id):
+        return example.domain.Payment.create(
+            order_id=event.originator_id,
+        )
 
 
 class Commands(CommandProcess):
 
+    # The following is not part of the policy!
+    # it's the "user interface" entry point.
+    # that's why it's different.
     @staticmethod
-    @retry((OperationalError, RecordConflictError), max_attempts=10, wait=0.01)
+    @retry(
+        (OperationalError, RecordConflictError),
+        max_attempts=10,
+        wait=0.01,
+    )
     def create_order():
         cmd = example.domain.CreateOrder.create()
         cmd.__save__()
@@ -89,12 +89,12 @@ class Commands(CommandProcess):
         """Do nothing by default."""
 
     @policy.register(example.domain.Order.Created)
-    def _(self, repository, event):
+    def _set_order_id(self, repository, event):
         cmd = repository[event.command_id]
         cmd.order_id = event.originator_id
 
     @policy.register(example.domain.Order.Paid)
-    def _(self, repository, event):
+    def _set_done(self, repository, event):
         cmd = repository[event.command_id]
         cmd.done()
 
@@ -106,9 +106,7 @@ class Commands(CommandProcess):
 # The question is then what to do with Reporting type processes?
 # They want to expose through FastAPI, and ideally update their state
 # close to that?
-
-
-# Reply from john
+# /!\ Reply from john
 # - multiple web app instances: simplest thing is each has a command
 # application writing to the same 'pipeline id', might help to have
 # multiple pipelines reducing contention on writing log sequences.
