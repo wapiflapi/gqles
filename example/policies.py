@@ -70,6 +70,8 @@ class Payments(ProcessApplication):
 
 class Commands(CommandProcess):
 
+    PossibleExceptions = (OperationalError, RecordConflictError)
+
     # TODO: developer contention on the Commnds process?
     # if this is a single entry point how to deal with
     #  - code activity (development contention)
@@ -89,7 +91,7 @@ class Commands(CommandProcess):
     # that's why it's different.
     @staticmethod
     @retry(
-        (OperationalError, RecordConflictError),
+        PossibleExceptions,
         max_attempts=10,
         wait=0.01,
     )

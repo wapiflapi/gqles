@@ -1,28 +1,29 @@
-import base64
-import datetime
-import decimal
-import functools
-import json
-import uuid
-
 import ariadne
-
-import eventsourcing.utils.topic
-import eventsourcing.application.notificationlog
 
 import sqlalchemy
 
-import gqles.schema
+import gqles.scalars
 
-from gqles.application import get_system_runner
+import example.policies
 
 
-
+mutation = ariadne.ObjectType("Mutation")
 query = ariadne.ObjectType("Query")
 
 types = [
+    mutation,
     query,
+    *gqles.scalars.types,
 ]
+
+
+
+@mutation.field("createOrder")
+async def resolve_create_order(obj, info, input):
+    return dict(created=dict(
+        uuid=example.policies.Commands.create_order(),
+    ))
+
 
 @query.field("db")
 async def resolve_db(obj, info):

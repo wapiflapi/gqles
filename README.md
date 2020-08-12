@@ -76,6 +76,8 @@ This is code that is included which each module / service
 - eventsourcing doesn't use asyncio
 - eventsourcing doesn't use pedantic and lacks typing / ide support
 
+- FIXME: @retry should really be async since it sleeps, easy fix?
+
 ## Considerations for the future
 
 

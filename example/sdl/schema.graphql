@@ -1,3 +1,28 @@
+scalar Datetime
+scalar UUID
+
+type CommandCreation {
+  uuid: UUID
+}
+
+interface CommandPayload {
+  created: CommandCreation!
+}
+
+
+type Mutation {
+  createOrder(input: CreateOrderInput!): CreateOrderPayload
+}
+
+input CreateOrderInput {
+  dummy: Boolean
+}
+
+type CreateOrderPayload implements CommandPayload {
+  created: CommandCreation!
+}
+
+
 type Query {
   db: [DBTable!]
 }

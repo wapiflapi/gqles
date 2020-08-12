@@ -65,17 +65,9 @@ async def teardown_application():
 
 @app.get("/")
 async def root():
-
-    # TODO: coul be
-    # Commands.create_order() // which would handle retry!
-    aggregate = example.domain.CreateOrder.create()
-    aggregate.__save__()
-
-    print(aggregate.__dict__)
-    return aggregate
-
     return dict(
         mission="Make it hard to mess up.",
+        moto="Simple is good but magic is occult.",
         context=starlette_context.context,
     )
 
