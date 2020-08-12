@@ -1,0 +1,141 @@
+type Query {
+  applications: [Application!]
+
+  notifications(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+    applicationNames: [String!],
+  ): NotificationConnection!
+
+  event(
+    applicationName: String!,
+    originatorId: UUID!,
+    originatorVersion: Int!,
+  ): Event
+
+  insights(
+    uuids: [UUID!]!,
+  ): [Insight]!
+}
+
+type Insight {
+  applicationName: String!
+  originator: Originator
+}
+
+type Originator {
+  originatorId: UUID!
+  last: Event!
+  events(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+  ): EventConnection!
+}
+
+type Application {
+  id: ID!
+  name: String!
+  originator(
+    originatorId: UUID!
+  ): Originator
+  notifications(
+    last: Int = 20,
+    before: String,
+    first: Int,
+    after: String,
+  ): NotificationConnection!
+}
+
+type EventConnection {
+  pageInfo: PageInfo!
+  edges: [EventEdge!]!
+}
+
+type EventEdge {
+  cursor: String!
+  node: Event!
+}
+
+type Event {
+
+  id: ID!
+
+  topic: String
+  applicationName: String!
+  originatorId: UUID!
+  originatorVersion: Int!
+  timestamp: Datetime
+  state: String
+  # Something else we need is insight into the state:
+  stateInsight: [StateInsight!]
+
+  previousEvents(
+    last: Int = 20,
+    before: String,
+  ): EventConnection!
+
+  nextEvents(
+    first: Int = 20,
+    after: String,
+  ): EventConnection!
+
+}
+
+interface StateInsight {
+  key: String!
+  text: String
+}
+
+type StateInsightDatetime implements StateInsight {
+  key: String!
+  text: String
+  datetime: Datetime!
+}
+
+type StateInsightUUID implements StateInsight {
+  key: String!
+  text: String
+  uuid: UUID!
+}
+
+type StateInsightJSON implements StateInsight {
+  key: String!
+  text: String
+  json: String!
+}
+
+
+type NotificationConnection {
+  pageInfo: PageInfo!
+  edges: [NotificationEdge!]!
+}
+
+type NotificationEdge {
+  application: Application!
+  cursor: String!
+  node: Notification!
+}
+
+type Notification {
+  notificationId: Int!
+  originatorId: UUID!
+  originatorVersion: Int!
+  topic: String
+  state: String
+  causalDependencies: String
+  event: Event
+}
+
+type PageInfo {
+  hasPreviousPage: Boolean!
+  hasNextPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+scalar Datetime
+scalar UUID

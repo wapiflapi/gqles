@@ -1,7 +1,3 @@
-from eventsourcing.application.sqlalchemy import SQLAlchemyApplication
-from eventsourcing.system.runner import SingleThreadedRunner
-
-
 _system_runner = None
 
 

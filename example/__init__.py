@@ -8,6 +8,7 @@ import starlette_context.middleware
 
 import sqlalchemy
 
+import gqles
 import gqles.application
 
 import example.application
@@ -18,6 +19,10 @@ import example.context
 
 
 app = FastAPI()
+
+app.mount("/backstage/graphql", gqles.BackstageGraphQL(
+    debug=True,
+))
 
 app.mount("/graphql", GraphQL(
     example.schema.schema,

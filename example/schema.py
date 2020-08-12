@@ -17,7 +17,6 @@ import gqles.schema
 from gqles.application import get_system_runner
 
 
-type_defs = ariadne.load_schema_from_path("example/sdl/")
 
 query = ariadne.ObjectType("Query")
 
@@ -39,11 +38,12 @@ async def resolve_db(obj, info):
     ) for table in insp.get_table_names()]
 
 
+type_defs = ariadne.load_schema_from_path("example/sdl/")
+
 # TODO: gqles should at least give a warning if not everything is
 # passed on here I've had problems multiple times forgetting to add
 # something.
 schema = ariadne.make_executable_schema(
     type_defs,
-    *gqles.schema.types,
     *types,
 )

@@ -571,3 +571,7 @@ async def resolve_event_id(obj, info):
         decode(key, value)
         for key, value in obj["event"].__dict__.items()
     ]
+
+
+type_defs = ariadne.load_schema_from_path("gqles/")
+schema = ariadne.make_executable_schema(type_defs, *types)

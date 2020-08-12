@@ -68,7 +68,7 @@ const client = new ApolloClient({
     cache: new InMemoryCache(),
     link: ApolloLink.from([
         new RetryLink(),
-        new HttpLink({ uri: 'http://localhost:8000/graphql/' })
+        new HttpLink({ uri: 'http://localhost:8000/backstage/graphql/' })
     ]),
 });
 
