@@ -6,7 +6,7 @@ from typing import Optional, Any
 
 from eventsourcing.domain.model.aggregate import AggregateRoot
 from eventsourcing.domain.model.command import Command
-from eventsourcing.domain.model.decorators import attribute
+from eventsourcing.domain.model.decorators import attribute, subclassevents
 
 from example.model import Model
 
@@ -23,7 +23,7 @@ from example.model import Model
 # to be fair es has__subclassevents__ in the metaclass for this?
 # TODO: Full typing example!
 
-
+@subclassevents
 class Order(Model, AggregateRoot):
 
     command_id: uuid.UUID
@@ -34,17 +34,11 @@ class Order(Model, AggregateRoot):
     def create(cls, command_id):
         return cls.__create__(command_id=command_id)
 
-    class Event(AggregateRoot.Event):
-        pass
-
-    class Created(Event, AggregateRoot.Created):
-        pass
-
-    class Reserved(Event):
+    class Reserved(AggregateRoot.Event):
         def mutate(self, order: "Order"):
             order.reservation_id = self.reservation_id
 
-    class Paid(Event):
+    class Paid(AggregateRoot.Event):
         def mutate(self, order: "Order"):
             order.payment_id = self.payment_id
 
@@ -69,26 +63,19 @@ class Order(Model, AggregateRoot):
         )
 
 
+@subclassevents
 class CreateOrder(Model, Command):
 
     @classmethod
     def create(cls):
         return cls.__create__()
 
-    class Event(Command.Event):
-        pass
-
-    class Created(Event, Command.Created):
-        pass
-
-    class AttributeChanged(Event, Command.AttributeChanged):
-        pass
-
     @attribute
     def order_id(self):
         pass
 
 
+@subclassevents
 class Reservation(Model, AggregateRoot):
 
     order_id: uuid.UUID
@@ -97,13 +84,8 @@ class Reservation(Model, AggregateRoot):
     def create(cls, order_id):
         return cls.__create__(order_id=order_id)
 
-    class Event(AggregateRoot.Event):
-        pass
 
-    class Created(Event, AggregateRoot.Created):
-        pass
-
-
+@subclassevents
 class Payment(Model, AggregateRoot):
 
     order_id: uuid.UUID
@@ -111,9 +93,3 @@ class Payment(Model, AggregateRoot):
     @classmethod
     def create(cls, order_id):
         return cls.__create__(order_id=order_id)
-
-    class Event(AggregateRoot.Event):
-        pass
-
-    class Created(Event, AggregateRoot.Created):
-        pass

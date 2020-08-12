@@ -81,9 +81,9 @@ class Commands(CommandProcess):
     #    if this is just firing messages not doing logici,
     #    simply reccording the command it's FINE.
 
-    # TODO: We actually need some stuff in the order.
+    # TODO: We actually need some stuff (items, amoutn, etc. INPUT) in the order.
 
-    # TODO: Is this the thing we want to expose on GQL?
+    # TODO: Is this the thing we want to expose on GQL? -> YES
     # The following is not part of the policy!
     # it's the "user interface" entry point.
     # that's why it's different.
