@@ -6,7 +6,6 @@ import ariadne
 datetime_scalar = ariadne.ScalarType("Datetime")
 uuid_scalar = ariadne.ScalarType("UUID")
 
-
 # This is exported so that it can be added to the schema.
 types = [datetime_scalar, uuid_scalar]
 

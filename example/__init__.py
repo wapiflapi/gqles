@@ -8,6 +8,8 @@ import starlette_context.middleware
 
 import sqlalchemy
 
+import gqles.application
+
 import example.application
 import example.database
 import example.domain
@@ -46,7 +48,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def setup_application():
-    await example.application.init_system_runner()
+    await gqles.application.start_system_runner(
+        example.application.SystemRunner(),
+    )
 
 
 @app.on_event("shutdown")

@@ -8,7 +8,7 @@ from eventsourcing.domain.model.aggregate import AggregateRoot
 from eventsourcing.domain.model.command import Command
 from eventsourcing.domain.model.decorators import attribute, subclassevents
 
-from example.model import Model
+from gqles.model import Model
 
 # All the domain event classes are defined explicitly on the aggregate
 # root classes. This is important because the application policies
