@@ -49,7 +49,7 @@ class Reservations(ProcessApplication):
         """Do nothing by default."""
 
     @policy.register(example.domain.Order.Created)
-    def _create_reservation(self, order_id):
+    def _create_reservation(self, repository, event):
         return example.domain.Reservation.create(
             order_id=event.originator_id,
         )
@@ -62,7 +62,7 @@ class Payments(ProcessApplication):
         """Do nothing by default."""
 
     @policy.register(example.domain.Order.Reserved)
-    def _create_payment(self, order_id):
+    def _create_payment(self, repository, event):
         return example.domain.Payment.create(
             order_id=event.originator_id,
         )
@@ -70,6 +70,20 @@ class Payments(ProcessApplication):
 
 class Commands(CommandProcess):
 
+    # TODO: developer contention on the Commnds process?
+    # if this is a single entry point how to deal with
+    #  - code activity (development contention)
+    #    there is no logic, it should be declarative from
+    #    the dev teams and serve as a registry.
+    #    MUCH like the schema first graphql,
+    #    There might be something with FEDERATION
+    #  - scale / distribution
+    #    if this is just firing messages not doing logici,
+    #    simply reccording the command it's FINE.
+
+    # TODO: We actually need some stuff in the order.
+
+    # TODO: Is this the thing we want to expose on GQL?
     # The following is not part of the policy!
     # it's the "user interface" entry point.
     # that's why it's different.
@@ -99,6 +113,8 @@ class Commands(CommandProcess):
         cmd.done()
 
 
+# TODO: put these comments where they needs to go.
+# -> spoiler, not here.
 # Some thoughts from wapi:
 # Maybe it makes sense to have one instance of Commands application
 # for each "Web worker" (instance of FastAPI), and then have the "Core"

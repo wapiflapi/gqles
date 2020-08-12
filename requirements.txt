@@ -4,3 +4,4 @@ starlette-context
 pytest-asyncio
 ariadne
 uvicorn
+pydantic

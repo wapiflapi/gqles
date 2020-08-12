@@ -69,5 +69,23 @@ This is code that is included which each module / service
 - Wasn't super clear if application was threadsafe
 - Not clear how updating the domain models ends up storing events in the application's event store.
   turns out: the application has a persistence policy that subscribes to domain events. (using subscribe, which is the interface)
+    This is magic. It should be simple, not magic (which is obscure)
 - encryption is done after compression, that's not recommended!
 - eventsourcing.utils.times.datetime_from_timestamp is naive. WTF.
+
+- eventsourcing doesn't use asyncio
+- eventsourcing doesn't use pedantic and lacks typing / ide support
+
+## Considerations for the future
+
+
+TODO: developer contention on the Commnds process?
+if this is a single entry point how to deal with
+ - code activity (development contention)
+   there is no logic, it should be declarative from
+   the dev teams and serve as a registry.
+   MUCH like the schema first graphql,
+   There might be something with FEDERATION
+ - scale / distribution
+   if this is just firing messages not doing logici,
+   simply reccording the command it's FINE.

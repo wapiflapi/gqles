@@ -57,6 +57,8 @@ async def teardown_application():
 @app.get("/")
 async def root():
 
+    # TODO: coul be
+    # Commands.create_order() // which would handle retry!
     aggregate = example.domain.CreateOrder.create()
     aggregate.__save__()
 

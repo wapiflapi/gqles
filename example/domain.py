@@ -1,8 +1,14 @@
-# coding: utf-8
+from devtools import debug
+
+import uuid
+
+from typing import Optional, Any
 
 from eventsourcing.domain.model.aggregate import AggregateRoot
 from eventsourcing.domain.model.command import Command
 from eventsourcing.domain.model.decorators import attribute
+
+from example.model import Model
 
 # All the domain event classes are defined explicitly on the aggregate
 # root classes. This is important because the application policies
@@ -11,9 +17,22 @@ from eventsourcing.domain.model.decorators import attribute
 # base aggregate root class, then one aggregate’s Created event can’t
 # be distinguished from another’s, and the application policy won’t
 # work as expected.
+# TODO: There should be a warning when policy.register uses a non
+# locally subclassed Event.
+# (or better the other ones shouldn't be exposed in the first place?)
+# to be fair es has__subclassevents__ in the metaclass for this?
+# TODO: Full typing example!
 
 
-class Order(AggregateRoot):
+class Order(Model, AggregateRoot):
+
+    command_id: uuid.UUID
+    reservation_id: Optional[uuid.UUID]
+    payment_id: Optional[uuid.UUID]
+
+    @classmethod
+    def create(cls, command_id):
+        return cls.__create__(command_id=command_id)
 
     class Event(AggregateRoot.Event):
         pass
@@ -21,37 +40,27 @@ class Order(AggregateRoot):
     class Created(Event, AggregateRoot.Created):
         pass
 
-    @classmethod
-    def create(cls, command_id):
-        return cls.__create__(command_id=command_id)
-
-    def __init__(self, command_id=None, **kwargs):
-        super(Order, self).__init__(**kwargs)
-        self.command_id = command_id
-        self.reservation_id = None
-        self.payment_id = None
-
     class Reserved(Event):
         def mutate(self, order: "Order"):
             order.reservation_id = self.reservation_id
-
-    @property
-    def is_reserved(self):
-        return self.reservation_id is not None
-
-    def set_is_reserved(self, reservation_id):
-        assert not self.is_reserved, f"Order ${self.id} already reserved."
-        self.__trigger_event__(
-            Order.Reserved, reservation_id=reservation_id
-        )
 
     class Paid(Event):
         def mutate(self, order: "Order"):
             order.payment_id = self.payment_id
 
     @property
+    def is_reserved(self):
+        return self.reservation_id is not None
+
+    @property
     def is_paid(self):
         return self.payment_id is not None
+
+    def set_is_reserved(self, reservation_id):
+        assert not self.is_reserved, f"Order ${self.id} already reserved."
+        self.__trigger_event__(
+            Order.Reserved, reservation_id=reservation_id
+        )
 
     def set_is_paid(self, payment_id):
         assert not self.is_paid, "Order {} already paid.".format(self.id)
@@ -60,17 +69,17 @@ class Order(AggregateRoot):
         )
 
 
-class CreateOrder(Command):
+class CreateOrder(Model, Command):
+
+    @classmethod
+    def create(cls):
+        return cls.__create__()
 
     class Event(Command.Event):
         pass
 
     class Created(Event, Command.Created):
         pass
-
-    @classmethod
-    def create(cls):
-        return cls.__create__()
 
     class AttributeChanged(Event, Command.AttributeChanged):
         pass
@@ -80,7 +89,13 @@ class CreateOrder(Command):
         pass
 
 
-class Reservation(AggregateRoot):
+class Reservation(Model, AggregateRoot):
+
+    order_id: uuid.UUID
+
+    @classmethod
+    def create(cls, order_id):
+        return cls.__create__(order_id=order_id)
 
     class Event(AggregateRoot.Event):
         pass
@@ -88,27 +103,17 @@ class Reservation(AggregateRoot):
     class Created(Event, AggregateRoot.Created):
         pass
 
+
+class Payment(Model, AggregateRoot):
+
+    order_id: uuid.UUID
+
     @classmethod
     def create(cls, order_id):
         return cls.__create__(order_id=order_id)
-
-    def __init__(self, order_id, **kwargs):
-        super(Reservation, self).__init__(**kwargs)
-        self.order_id = order_id
-
-
-class Payment(AggregateRoot):
 
     class Event(AggregateRoot.Event):
         pass
 
     class Created(Event, AggregateRoot.Created):
         pass
-
-    @classmethod
-    def create(cls, order_id):
-        return cls.__create__(order_id=order_id)
-
-    def __init__(self, order_id, **kwargs):
-        super(Payment, self).__init__(**kwargs)
-        self.order_id = order_id
