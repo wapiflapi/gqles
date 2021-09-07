@@ -10,18 +10,6 @@ from eventsourcing.domain.model.decorators import attribute, subclassevents
 
 from gqles.model import Model
 
-# All the domain event classes are defined explicitly on the aggregate
-# root classes. This is important because the application policies
-# will use the domain event classes to decide how to respond to the
-# events, and if the aggregate classes use the event classes from the
-# base aggregate root class, then one aggregate’s Created event can’t
-# be distinguished from another’s, and the application policy won’t
-# work as expected.
-# TODO: There should be a warning when policy.register uses a non
-# locally subclassed Event.
-# (or better the other ones shouldn't be exposed in the first place?)
-# to be fair es has__subclassevents__ in the metaclass for this?
-# TODO: Full typing example!
 
 @subclassevents
 class Order(Model, AggregateRoot):

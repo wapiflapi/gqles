@@ -78,7 +78,12 @@ This is code that is included which each module / service
 
 - FIXME: @retry should really be async since it sleeps, easy fix?
 
+- There should be a warning when using non subclassed events from policies
+
 ## Considerations for the future
+
+GDPR: retention period with snapshots, refresh encryption keys with
+versioning, PII encrypted.
 
 
 TODO: developer contention on the Commnds process?
@@ -91,3 +96,28 @@ if this is a single entry point how to deal with
  - scale / distribution
    if this is just firing messages not doing logici,
    simply reccording the command it's FINE.
+
+
+
+
+#### Some thoughts from wapi:
+Maybe it makes sense to have one instance of Commands application
+for each "Web worker" (instance of FastAPI), and then have the "Core"
+be independent of that, for example with thespian.
+The question is then what to do with Reporting type processes?
+They want to expose through FastAPI, and ideally update their state
+close to that?
+/!\ Reply from john
+- multiple web app instances: simplest thing is each has a command
+application writing to the same 'pipeline id', might help to have
+multiple pipelines reducing contention on writing log sequences.
+- assuming one pipeline id: one instance of each downstream process
+application process. Like micro services except the call is a prompt.
+- multiple pipelines adds another level of complexity.
+
+
+### Developer Contention
+
+The CommandProcess might be a place where development congestion occurs,
+it is similar in scope to a schema first graphql approach, can we take
+inspiration from graphql federation?

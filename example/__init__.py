@@ -52,7 +52,8 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-async def setup_application():
+def setup_application():
+    # TODO: these are actually not async because eventsourcing doesn't do that.
     await gqles.application.start_system_runner(
         example.application.SystemRunner(),
     )

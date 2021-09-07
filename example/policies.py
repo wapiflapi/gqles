@@ -70,31 +70,16 @@ class Payments(ProcessApplication):
 
 class Commands(CommandProcess):
 
-    PossibleExceptions = (OperationalError, RecordConflictError)
-
-    # TODO: developer contention on the Commnds process?
-    # if this is a single entry point how to deal with
-    #  - code activity (development contention)
-    #    there is no logic, it should be declarative from
-    #    the dev teams and serve as a registry.
-    #    MUCH like the schema first graphql,
-    #    There might be something with FEDERATION
-    #  - scale / distribution
-    #    if this is just firing messages not doing logici,
-    #    simply reccording the command it's FINE.
-
-    # TODO: We actually need some stuff (items, amoutn, etc. INPUT) in the order.
-
-    # TODO: Is this the thing we want to expose on GQL? -> YES
-    # The following is not part of the policy!
-    # it's the "user interface" entry point.
-    # that's why it's different.
     @staticmethod
-    @retry(
-        PossibleExceptions,
-        max_attempts=10,
-        wait=0.01,
-    )
+    def robust_interface(**kwargs):
+        return retry(
+            (OperationalError, RecordConflictError),
+            max_attempts=10,
+            wait=0.01,
+        )
+
+    @staticmethod
+    @robust_interface()
     def create_order():
         cmd = example.domain.CreateOrder.create()
         cmd.__save__()
@@ -113,24 +98,6 @@ class Commands(CommandProcess):
     def _set_done(self, repository, event):
         cmd = repository[event.command_id]
         cmd.done()
-
-
-# TODO: put these comments where they needs to go.
-# -> spoiler, not here.
-# Some thoughts from wapi:
-# Maybe it makes sense to have one instance of Commands application
-# for each "Web worker" (instance of FastAPI), and then have the "Core"
-# be independent of that, for example with thespian.
-# The question is then what to do with Reporting type processes?
-# They want to expose through FastAPI, and ideally update their state
-# close to that?
-# /!\ Reply from john
-# - multiple web app instances: simplest thing is each has a command
-# application writing to the same 'pipeline id', might help to have
-# multiple pipelines reducing contention on writing log sequences.
-# - assuming one pipeline id: one instance of each downstream process
-# application process. Like micro services except the call is a prompt.
-# - multiple pipelines adds another level of complexity.
 
 
 system = System(

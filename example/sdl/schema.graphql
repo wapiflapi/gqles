@@ -1,12 +1,12 @@
 scalar Datetime
 scalar UUID
 
-type CommandCreation {
+type Command {
   uuid: UUID
 }
 
 interface CommandPayload {
-  created: CommandCreation!
+  command: Command!
 }
 
 
@@ -19,7 +19,7 @@ input CreateOrderInput {
 }
 
 type CreateOrderPayload implements CommandPayload {
-  created: CommandCreation!
+  command: Command!
 }
 
 

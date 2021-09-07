@@ -1,7 +1,7 @@
 _system_runner = None
 
 
-async def start_system_runner(system_runner):
+def start_system_runner(system_runner):
     global _system_runner
     if _system_runner is not None:
         raise AssertionError("init_system_runner() has already been called")
@@ -10,13 +10,13 @@ async def start_system_runner(system_runner):
     return _system_runner
 
 
-async def get_system_runner():
+def get_system_runner():
     if _system_runner is None:
         raise AssertionError("init_system_runner() must be called first")
     return _system_runner
 
 
-async def close_system_runner():
+def close_system_runner():
     global _system_runner
     if _system_runner is not None:
         _system_runner.close()

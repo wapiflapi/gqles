@@ -1,3 +1,5 @@
+from devtools import debug
+
 import ariadne
 
 import sqlalchemy
@@ -17,10 +19,16 @@ types = [
 ]
 
 
+# TODO: There will be cases in which commands fail imediately
+# for "logical reasons", eg input inconsistency, authorization,
+# etc. Those cases should return those errors in a generic way.
+# IDEA: If the viewer should see the error, include the error as a
+# field in the response payload.
+# AKA: if it should be seen it's not an error.
 
 @mutation.field("createOrder")
 async def resolve_create_order(obj, info, input):
-    return dict(created=dict(
+    return dict(command=dict(
         uuid=example.policies.Commands.create_order(),
     ))
 
